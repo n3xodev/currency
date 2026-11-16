@@ -8,9 +8,6 @@ import {
 } from "../../utils/payment_currency_utils";
 import { MoneyDetailsPopup } from "@point_of_sale/app/components/popups/money_details_popup/money_details_popup";
 import { _t } from "@web/core/l10n/translation";
-import { parseFloat } from "@web/views/fields/parsers";
-import { ConnectionLostError } from "@web/core/network/rpc";
-import { deduceUrl } from "@point_of_sale/utils";
 
 ClosePosPopup.props = [...ClosePosPopup.props, "cash_details?"];
 
@@ -366,91 +363,25 @@ patch(ClosePosPopup.prototype, {
     },
 
     async closeSession() {
-        this.pos._resetConnectedCashier();
-        if (this.pos.config.customer_display_type === "proxy") {
-            const proxyIP = this.pos.getDisplayDeviceIP();
-            fetch(`${deduceUrl(proxyIP)}/hw_proxy/customer_facing_display`, {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ params: { action: "close" } }),
-                targetAddressSpace: odoo.use_lna ? "local" : undefined,
-            }).catch(() => {
-                console.log("Failed to send data to customer display");
-            });
-        }
-        // Odoo 19 renamed push_orders_with_closing_popup() to
-        // pushOrdersWithClosingPopup().
-        const syncSuccess = await this.pos.pushOrdersWithClosingPopup();
-        if (!syncSuccess) {
-            return;
-        }
         if (this.pos.config.cash_control) {
-            const cashDetailsList = this.getCashDetailsList();
-            const primary = cashDetailsList[0] || this.props.default_cash_details;
+            // The core flow only sends the primary cash count; store the
+            // count of every cash method before delegating to it.
             const countedCashByMethod = {};
-            for (const cashDetails of cashDetailsList) {
-                countedCashByMethod[cashDetails.id] = this.env.utils.parseValidFloat(
-                    this.state.payments[cashDetails.id].counted
-                );
+            for (const cashDetails of this.getCashDetailsList()) {
+                const counted = this._parseClosingCountedAmount(cashDetails.id);
+                if (!Number.isNaN(counted)) {
+                    countedCashByMethod[cashDetails.id] = counted;
+                }
             }
             const response = await this.pos.data.call(
                 "pos.session",
-                "post_closing_cash_details",
-                [this.pos.session.id],
-                {
-                    counted_cash: countedCashByMethod[primary.id],
-                    counted_cash_by_method: countedCashByMethod,
-                }
-            );
-
-            if (!response.successful) {
-                return this.handleClosingError(response);
-            }
-        }
-
-        try {
-            await this.pos.data.call("pos.session", "update_closing_control_state_session", [
-                this.pos.session.id,
-                this.state.notes,
-            ]);
-        } catch (error) {
-            if (!error.data && error.data.message !== "This session is already closed.") {
-                throw error;
-            }
-        }
-
-        try {
-            const bankPaymentMethodDiffPairs = this.props.non_cash_payment_methods
-                .filter((pm) => pm.type == "bank")
-                .map((pm) => [pm.id, this.getDifference(pm.id)]);
-            const response = await this.pos.data.call(
-                "pos.session",
-                "close_session_from_ui",
-                [this.pos.session.id, bankPaymentMethodDiffPairs],
-                {
-                    // Odoo 19's close_session_from_ui reads
-                    // context.device_identifier (self.env.context.get(
-                    // 'device_identifier', False)); login_number is no
-                    // longer read there, so passing it silently sent
-                    // nothing useful to the backend.
-                    context: {
-                        device_identifier: this.pos.device.identifier,
-                    },
-                }
+                "set_closing_counted_cash_by_method",
+                [this.pos.session.id, countedCashByMethod]
             );
             if (!response.successful) {
                 return this.handleClosingError(response);
             }
-            localStorage.removeItem(`pos.session.${odoo.pos_config_id}`);
-            location.reload();
-        } catch (error) {
-            if (error instanceof ConnectionLostError) {
-                throw error;
-            }
-            await this.handleClosingControlError();
         }
+        return super.closeSession(...arguments);
     },
 });

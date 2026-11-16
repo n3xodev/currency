@@ -705,6 +705,26 @@ class PosSession(models.Model):
             )
         return data
 
+    def set_closing_counted_cash_by_method(self, counted_cash_by_method):
+        """Store the counted amount of each cash method on its cash box.
+
+        Called by the closing popup before the core ``post_closing_cash_details``
+        flow, which only knows the primary cash count.
+        """
+        self.ensure_one()
+        check_closing_session = self._cannot_close_session()
+        if check_closing_session:
+            check_closing_session["open_order_ids"] = (
+                self.get_session_orders().filtered(lambda o: o.state == "draft").ids
+            )
+            return check_closing_session
+        self._oca_ensure_cash_boxes()
+        counted_map = self._oca_normalize_cashbox_values(counted_cash_by_method)
+        for cash_box in self.cash_box_ids:
+            if cash_box.payment_method_id.id in counted_map:
+                cash_box.balance_end_real = counted_map[cash_box.payment_method_id.id]
+        return {"successful": True}
+
     def post_closing_cash_details(self, counted_cash, counted_cash_by_method=None):
         self.ensure_one()
         result = super().post_closing_cash_details(counted_cash)
@@ -713,18 +733,17 @@ class PosSession(models.Model):
         self._oca_ensure_cash_boxes()
         counted_map = self._oca_normalize_cashbox_values(counted_cash_by_method)
         primary = self._oca_primary_cash_payment_method()
-        if primary and primary.id not in counted_map:
-            counted_map[primary.id] = counted_cash
         for cash_box in self.cash_box_ids:
-            counted = None
-            if cash_box.payment_method_id.id in counted_map:
-                counted = counted_map[cash_box.payment_method_id.id]
-            elif cash_box.payment_method_id == primary:
-                counted = counted_cash
-            if counted is None:
-                continue
-            cash_box.balance_end_real = counted
+            payment_method = cash_box.payment_method_id
+            if payment_method == primary:
+                counted = counted_map.get(payment_method.id, counted_cash)
+            elif payment_method.id in counted_map:
+                counted = counted_map[payment_method.id]
+            else:
+                # Counted earlier through set_closing_counted_cash_by_method.
+                counted = cash_box.balance_end_real
             expected = cash_box._oca_get_expected_balance()
+            cash_box.balance_end_real = counted
             cash_box.closing_difference = cash_box.currency_id.round(counted - expected)
         return result
 
