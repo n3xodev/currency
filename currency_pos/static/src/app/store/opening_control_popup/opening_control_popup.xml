@@ -5,7 +5,7 @@
             <div class="opening-cash-section mb-3" t-if="this.cashMethodCount">
                 <t t-foreach="getCashPaymentMethods()" t-as="cashMethod" t-key="cashMethod.id">
                     <label class="form-label">
-                        Opening cash — <t t-esc="formatOpeningCashLabel(cashMethod)"/>
+                        Opening cash — <t t-out="formatOpeningCashLabel(cashMethod)"/>
                     </label>
                     <div t-att-class="{ 'w-50': !ui.isSmall }" class="cash-input-sub-section d-flex gap-1 mb-2">
                         <Input tModel="[state.openingCashByMethod, cashMethod.id]"

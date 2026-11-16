@@ -11,11 +11,11 @@
         <xpath expr="//div[contains(@class, 'grid') and ./t[@t-foreach='props.info.productInfo.pricelists']]" position="replace">
             <div class="grid gap-2 mt-3">
                 <t t-foreach="props.info.productInfo.pricelists" t-as="pricelist" t-key="pricelist.name">
-                    <label class="fw-bold" t-esc="pricelist.name"/>
+                    <label class="fw-bold" t-out="pricelist.name"/>
                     <span>
-                        <t t-esc="getPricelistPriceLabel(pricelist)"/>
+                        <t t-out="getPricelistPriceLabel(pricelist)"/>
                         <div t-if="getPricelistSecondaryPrice(pricelist)" class="text-muted small">
-                            <t t-esc="getPricelistSecondaryPrice(pricelist)"/>
+                            <t t-out="getPricelistSecondaryPrice(pricelist)"/>
                         </div>
                     </span>
                 </t>

@@ -18,14 +18,14 @@ function applyTemplateInheritance(arch, operations) {
 const PAYMENT_AMOUNT_REPLACEMENT = `<div class="payment-amount px-3 text-end">
     <t t-if="line.isForeignCurrencyPayment and line.isForeignCurrencyPayment()">
         <div class="lh-sm">
-            <t t-esc="getPaymentLineForeignAmountDisplay(line)"/>
+            <t t-out="getPaymentLineForeignAmountDisplay(line)"/>
         </div>
         <div class="small text-muted lh-sm">
-            <t t-esc="getPaymentLineOrderAmountDisplay(line)"/>
+            <t t-out="getPaymentLineOrderAmountDisplay(line)"/>
         </div>
     </t>
     <t t-else="">
-        <t t-esc="getPaymentLineOrderAmountDisplay(line)"/>
+        <t t-out="getPaymentLineOrderAmountDisplay(line)"/>
     </t>
 </div>`;
 
@@ -35,9 +35,9 @@ const PAYMENT_SCREEN_PAYMENT_LINES_ARCH = `<t t-name="point_of_sale.PaymentScree
             <t t-if="line.isSelected()">
                 <div t-attf-class="paymentline selected d-flex align-items-center bg-200 border rounded-3">
                     <div class="payment-infos d-flex align-items-center justify-content-between flex-grow-1 px-3 py-3 text-truncate cursor-pointer fs-2">
-                        <span class="payment-name"><t t-esc="line.payment_method_id.name"/></span>
+                        <span class="payment-name"><t t-out="line.payment_method_id.name"/></span>
                         <div class="payment-amount px-3">
-                            <t t-esc="env.utils.formatCurrency(line.get_amount())" />
+                            <t t-out="env.utils.formatCurrency(line.get_amount())" />
                         </div>
                     </div>
                 </div>
@@ -45,9 +45,9 @@ const PAYMENT_SCREEN_PAYMENT_LINES_ARCH = `<t t-name="point_of_sale.PaymentScree
             <t t-else="">
                 <div class="paymentline d-flex align-items-center bg-view border rounded-3">
                     <div class="payment-infos d-flex align-items-center justify-content-between flex-grow-1 px-3 py-3 text-truncate cursor-pointer fs-2">
-                        <t t-esc="line.payment_method_id.name" />
+                        <t t-out="line.payment_method_id.name" />
                         <div class="payment-amount px-3">
-                            <t t-esc="env.utils.formatCurrency(line.get_amount())" />
+                            <t t-out="env.utils.formatCurrency(line.get_amount())" />
                         </div>
                     </div>
                 </div>
@@ -65,7 +65,7 @@ const PAYMENT_SCREEN_STATUS_ARCH = `<t t-name="point_of_sale.PaymentScreenStatus
             <div class="payment-status-remaining d-flex justify-content-between flex-grow-1">
                 <span class="label pe-2">Remaining</span>
                 <span class="amount align-self-end pe-5">
-                    <t t-esc="remainingText" />
+                    <t t-out="remainingText" />
                 </span>
             </div>
         </div>
@@ -84,7 +84,7 @@ const PAYMENT_SCREEN_PAYMENT_LINES_OPERATIONS = `<t t-inherit="point_of_sale.Pay
 const PAYMENT_SCREEN_STATUS_OPERATIONS = `<t t-inherit="point_of_sale.PaymentScreenStatus" t-inherit-mode="extension">
     <xpath expr="//div[hasclass('payment-status-container')]" position="before">
         <div t-if="getPaymentStatusCurrencyLabel()" class="text-muted small pb-2">
-            Entering amount in <t t-esc="getPaymentStatusCurrencyLabel()"/>
+            Entering amount in <t t-out="getPaymentStatusCurrencyLabel()"/>
         </div>
     </xpath>
 </t>`;
@@ -93,7 +93,7 @@ const PAYMENT_SCREEN_DUE_ARCH = `<t t-name="point_of_sale.PaymentScreenDue">
     <section class="paymentlines-container rounded-3 bg-view"
         t-att-class="{'paymentlines-empty': paymentLines.length === 0 }">
         <div class="total text-center py-2 py-lg-4 text-success">
-            <t t-esc="this.env.utils.formatCurrency(currentOrder.getTotalDue())" />
+            <t t-out="this.env.utils.formatCurrency(currentOrder.getTotalDue())" />
         </div>
     </section>
 </t>`;
@@ -106,7 +106,7 @@ const PAYMENT_SCREEN_DUE_OPERATIONS = `<t t-inherit="point_of_sale.PaymentScreen
         <div t-if="getPaymentCurrencyRateLabels().length"
             class="o_currency_pos_payment_rates position-absolute top-0 end-0 m-2 text-start text-muted fs-6 lh-sm">
             <div t-foreach="getPaymentCurrencyRateLabels()" t-as="rateLabel" t-key="rateLabel_index"
-                t-esc="rateLabel"/>
+                t-out="rateLabel"/>
         </div>
     </xpath>
 </t>`;
@@ -114,8 +114,8 @@ const PAYMENT_SCREEN_DUE_OPERATIONS = `<t t-inherit="point_of_sale.PaymentScreen
 const ORDER_RECEIPT_ARCH = `<t t-name="point_of_sale.OrderReceipt">
     <div class="pos-receipt p-2">
         <div class="paymentlines text-start" t-foreach="props.data.paymentlines" t-as="line" t-key="line_index">
-            <t t-esc="line.name" />
-            <span t-esc="props.formatCurrency(line.amount)" class="pos-receipt-right-align"/>
+            <t t-out="line.name" />
+            <span t-out="props.formatCurrency(line.amount)" class="pos-receipt-right-align"/>
         </div>
     </div>
 </t>`;
@@ -128,18 +128,18 @@ const ORDER_RECEIPT_OPERATIONS = `<t t-inherit="point_of_sale.OrderReceipt" t-in
             t-as="line"
             t-key="line_index"
         >
-            <t t-esc="line.name" />
+            <t t-out="line.name" />
             <span class="pos-receipt-right-align text-end">
                 <t t-if="line.is_foreign_currency_payment">
                     <div>
-                        <t t-esc="formatReceiptPaymentForeignAmount(line)" />
+                        <t t-out="formatReceiptPaymentForeignAmount(line)" />
                     </div>
                     <div>
-                        (<t t-esc="props.formatCurrency(line.amount)" />)
+                        (<t t-out="props.formatCurrency(line.amount)" />)
                     </div>
                 </t>
                 <t t-else="">
-                    <t t-esc="props.formatCurrency(line.amount)" />
+                    <t t-out="props.formatCurrency(line.amount)" />
                 </t>
             </span>
         </div>
