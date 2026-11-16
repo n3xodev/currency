@@ -455,3 +455,27 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "last_order_preparation_change": "{}",
             }
         )
+
+
+@tagged("post_install", "-at_install", "currency_pos")
+class TestPosSessionLoadDataRead(TestPosPaymentCurrencyCommon):
+    def test_device_sync_of_session_does_not_raise(self):
+        # pos_hr writes `employee_id` on the session at cashier login, which
+        # makes core dispatch a device sync of {"pos.session": [id]}. That
+        # calls `_load_pos_data_read` on the EMPTY model with the real session
+        # in `records`.
+        config = self.multi_currency_config
+        config.open_ui()
+        session = config.current_session_id
+        config.notify_synchronisation(session.id, "test-device", {"pos.session": [session.id]})
+
+    def test_load_pos_data_read_returns_cash_box_openings_per_row(self):
+        config = self.multi_currency_config
+        config.open_ui()
+        session = config.current_session_id
+        rows = self.env["pos.session"]._load_pos_data_read(session, config)
+        self.assertEqual(len(rows), 1)
+        openings = rows[0]["_oca_cash_box_openings"]
+        cash_method_ids = set(config.payment_method_ids.filtered("is_cash_count").ids)
+        self.assertTrue(cash_method_ids)
+        self.assertEqual(set(openings), cash_method_ids)
