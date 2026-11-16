@@ -38,6 +38,11 @@ registry.category("web_tour.tours").add("PosClosingCountedCashByMethodTour", {
                 content: "Confirm the closing of the register",
                 trigger: `${CLOSING_POPUP} .button.highlight:contains('Close Register')`,
                 run: "click",
+            },
+            {
+                content: "Accept the counting difference",
+                trigger: ".modal button:contains('Proceed Anyway')",
+                run: "click",
                 // Core leaves through `router.close()`, a full page navigation.
                 expectUnloadPage: true,
             },
