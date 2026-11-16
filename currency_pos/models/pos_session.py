@@ -1,3 +1,5 @@
+import math
+
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_is_zero
@@ -715,9 +717,37 @@ class PosSession(models.Model):
         """
         self.ensure_one()
         if self.state == "closed":
-            return self._cannot_close_session()
+            # Same payload as the closed branch of core _cannot_close_session,
+            # which would report draft orders first and make the popup retry.
+            return {
+                "successful": False,
+                "type": "alert",
+                "title": _("Session already closed"),
+                "message": _(
+                    "The session has been already closed by another User. "
+                    "All sales completed in the meantime have been saved in a "
+                    "Rescue Session, which can be reviewed anytime and posted "
+                    "to Accounting from Point of Sale's dashboard."
+                ),
+                "redirect": True,
+            }
+        try:
+            counted_map = self._oca_normalize_cashbox_values(counted_cash_by_method)
+            valid = all(
+                isinstance(amount, (int, float))
+                and not isinstance(amount, bool)
+                and math.isfinite(amount)
+                for amount in counted_map.values()
+            )
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            return {
+                "successful": False,
+                "message": _("The counted cash amounts are invalid."),
+                "redirect": False,
+            }
         self._oca_ensure_cash_boxes()
-        counted_map = self._oca_normalize_cashbox_values(counted_cash_by_method)
         for cash_box in self.cash_box_ids:
             if cash_box.payment_method_id.id in counted_map:
                 cash_box.balance_end_real = counted_map[cash_box.payment_method_id.id]
