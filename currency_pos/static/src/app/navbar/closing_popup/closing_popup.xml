@@ -76,9 +76,9 @@
                                 icon="{type: 'string', value: getCurrencySymbol(cashDetails)}"
                                 iconOnLeftSide="false"
                                 class="'cash-input w-100'"/>
-                            <button class="icon fa fa-money btn btn-secondary"
+                            <button class="oi icon btn btn-secondary" data-icon="payments"
                                 t-on-click="() => this.openDetailsPopup(cashDetails)" />
-                            <button class="icon fa fa-clone btn btn-secondary"
+                            <button class="oi icon btn btn-secondary" data-icon="content_copy"
                                 t-on-click="() => this.autoFillCashCount(cashDetails)" />
                         </div>
                     </div>

@@ -26,7 +26,7 @@
                     name="reset_price_subtotal_currency" 
                     string="Reset" 
                     type="object" 
-                    icon="fa-refresh" 
+                    icon="refresh" 
                     invisible="not has_rate_difrerence" 
                     column_invisible="not parent.lines_with_rate_difference"/>
                 <field name="currency_rate" string="Tasa de Cambio" optional="hide" readonly="0" digits="[16,16]"/>
