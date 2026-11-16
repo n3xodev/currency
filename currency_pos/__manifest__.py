@@ -1,6 +1,6 @@
 {
     "name": "Currency POS",
-    "version": "19.0.1.0.0",
+    "version": "20.0.1.0.0",
     "category": "Point of Sale",
     "sequence": 10,
     "summary": "Multi-currency products and payments in Point of Sale",

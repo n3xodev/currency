@@ -5,7 +5,7 @@
 
 {
     "name": "Currency Rate Update",
-    "version": "19.0.1.0.1",
+    "version": "20.0.1.0.0",
     "author": "Camptocamp, CorporateHub, Odoo Community Association (OCA)",
     "website": "https://github.com/OCA/currency",
     "license": "AGPL-3",
