@@ -709,15 +709,13 @@ class PosSession(models.Model):
         """Store the counted amount of each cash method on its cash box.
 
         Called by the closing popup before the core ``post_closing_cash_details``
-        flow, which only knows the primary cash count.
+        flow, which only knows the primary cash count. Orders are not synced yet
+        at that point, so only a closed session is refused here; draft orders
+        are checked later by ``post_closing_cash_details``.
         """
         self.ensure_one()
-        check_closing_session = self._cannot_close_session()
-        if check_closing_session:
-            check_closing_session["open_order_ids"] = (
-                self.get_session_orders().filtered(lambda o: o.state == "draft").ids
-            )
-            return check_closing_session
+        if self.state == "closed":
+            return self._cannot_close_session()
         self._oca_ensure_cash_boxes()
         counted_map = self._oca_normalize_cashbox_values(counted_cash_by_method)
         for cash_box in self.cash_box_ids:
