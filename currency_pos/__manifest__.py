@@ -17,11 +17,11 @@
         "l10n_ve_product_currency",
     ],
     "data": [
-        "security/ir.model.access.csv",
         "views/pos_config_views.xml",
         "views/pos_payment_method_views.xml",
         "views/pos_payment_views.xml",
         "views/pos_order_views.xml",
+        'security/ir.access.csv',
     ],
     "assets": {
         "point_of_sale._assets_pos": [

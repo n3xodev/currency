@@ -14,12 +14,11 @@
     "depends": ["base", "mail", "account"],
     "data": [
         "data/cron.xml",
-        "security/ir.model.access.csv",
-        "security/res_currency_rate_provider.xml",
         "wizards/res_currency_rate_update_wizard.xml",
         "views/res_currency_rate.xml",
         "views/res_currency_rate_provider.xml",
         "views/res_config_settings.xml",
+        'security/ir.access.csv',
     ],
     "installable": True,
 }
