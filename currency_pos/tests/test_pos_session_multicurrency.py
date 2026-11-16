@@ -479,3 +479,186 @@ class TestPosSessionLoadDataRead(TestPosPaymentCurrencyCommon):
         cash_method_ids = set(config.payment_method_ids.filtered("is_cash_count").ids)
         self.assertTrue(cash_method_ids)
         self.assertEqual(set(openings), cash_method_ids)
+
+
+@tagged("post_install", "-at_install", "currency_pos")
+class TestPosSessionClosingCounts(TestPosPaymentCurrencyCommon):
+    def _open_session(self):
+        self.config = self.multi_currency_config
+        self.multi_currency_config.open_ui()
+        session = self.multi_currency_config.current_session_id
+        session.oca_set_opening_control(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 20.0,
+            },
+            False,
+        )
+        return session
+
+    def test_set_closing_counted_cash_by_method_stores_counts(self):
+        session = self._open_session()
+        result = session.set_closing_counted_cash_by_method(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 18.0,
+            }
+        )
+        self.assertTrue(result["successful"])
+        primary_box = session._oca_get_cash_box(self.cash_payment_method)
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(primary_box.balance_end_real, 5.0, places=2)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
+
+    def test_post_closing_cash_details_uses_stored_counts(self):
+        session = self._open_session()
+        session.set_closing_counted_cash_by_method(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 18.0,
+            }
+        )
+        result = session.post_closing_cash_details(5.0)
+        self.assertTrue(result["successful"])
+        primary_box = session._oca_get_cash_box(self.cash_payment_method)
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(primary_box.balance_end_real, 5.0, places=2)
+        self.assertAlmostEqual(primary_box.closing_difference, 0.0, places=2)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
+        self.assertAlmostEqual(eur_box.closing_difference, -2.0, places=2)
+
+    def test_post_closing_cash_details_primary_uses_counted_cash(self):
+        session = self._open_session()
+        session.set_closing_counted_cash_by_method({self.cash_payment_method.id: 1.0})
+        session.post_closing_cash_details(5.0)
+        primary_box = session._oca_get_cash_box(self.cash_payment_method)
+        self.assertAlmostEqual(primary_box.balance_end_real, 5.0, places=2)
+
+    def test_post_closing_cash_details_kwarg_still_works(self):
+        session = self._open_session()
+        session.set_closing_counted_cash_by_method({self.eur_cash_payment_method.id: 18.0})
+        session.post_closing_cash_details(
+            5.0,
+            counted_cash_by_method={
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 19.0,
+            },
+        )
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 19.0, places=2)
+        self.assertAlmostEqual(eur_box.closing_difference, -1.0, places=2)
+
+    def test_set_closing_counted_cash_by_method_refuses_closed_session(self):
+        session = self._open_session()
+        session.post_closing_cash_details(
+            5.0,
+            counted_cash_by_method={
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 20.0,
+            },
+        )
+        session.close_session_from_ui()
+        self.assertEqual(session.state, "closed")
+        result = session.set_closing_counted_cash_by_method(
+            {self.eur_cash_payment_method.id: 1.0}
+        )
+        self.assertFalse(result["successful"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 20.0, places=2)
+
+    def test_set_closing_counted_cash_by_method_ignores_draft_orders(self):
+        # The popup calls the RPC before syncing local orders, so draft orders
+        # must not block it; post_closing_cash_details checks them afterwards.
+        session = self._open_session()
+        self.env["pos.order"].create(
+            {
+                "session_id": session.id,
+                "partner_id": self.partner1.id,
+                "amount_total": 10.0,
+                "amount_tax": 0.0,
+                "amount_paid": 0.0,
+                "amount_return": 0.0,
+                "state": "draft",
+                "last_order_preparation_change": "{}",
+            }
+        )
+        result = session.set_closing_counted_cash_by_method(
+            {self.eur_cash_payment_method.id: 18.0}
+        )
+        self.assertTrue(result["successful"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
+
+    def test_set_closing_counted_cash_by_method_closed_session_with_draft_order(self):
+        # A closed session that still has a draft order must get the closed
+        # alert (redirect), not the draft-orders message the popup can retry.
+        session = self._open_session()
+        session.post_closing_cash_details(
+            5.0,
+            counted_cash_by_method={
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 20.0,
+            },
+        )
+        session.close_session_from_ui()
+        self.assertEqual(session.state, "closed")
+        self.env["pos.order"].create(
+            {
+                "session_id": session.id,
+                "partner_id": self.partner1.id,
+                "amount_total": 10.0,
+                "amount_tax": 0.0,
+                "amount_paid": 0.0,
+                "amount_return": 0.0,
+                "state": "draft",
+                "last_order_preparation_change": "{}",
+            }
+        )
+        result = session.set_closing_counted_cash_by_method(
+            {self.eur_cash_payment_method.id: 1.0}
+        )
+        self.assertFalse(result["successful"])
+        self.assertEqual(result["type"], "alert")
+        self.assertTrue(result["redirect"])
+
+    def _assert_counts_refused(self, session, counted_cash_by_method):
+        result = session.set_closing_counted_cash_by_method(counted_cash_by_method)
+        self.assertFalse(result["successful"])
+        self.assertFalse(result["redirect"])
+        self.assertTrue(result["message"])
+        for box in session.cash_box_ids:
+            self.assertEqual(box.balance_end_real, 0.0)
+
+    def test_set_closing_counted_cash_by_method_rejects_malformed_key(self):
+        session = self._open_session()
+        self._assert_counts_refused(
+            session, {"abc": 1.0, self.eur_cash_payment_method.id: 18.0}
+        )
+
+    def test_set_closing_counted_cash_by_method_rejects_non_numeric_value(self):
+        session = self._open_session()
+        self._assert_counts_refused(
+            session,
+            {self.cash_payment_method.id: "x", self.eur_cash_payment_method.id: 18.0},
+        )
+
+    def test_set_closing_counted_cash_by_method_rejects_non_finite_value(self):
+        session = self._open_session()
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            self._assert_counts_refused(
+                session,
+                {self.cash_payment_method.id: bad, self.eur_cash_payment_method.id: 18.0},
+            )
+
+    def test_set_closing_counted_cash_by_method_ignores_unknown_method(self):
+        session = self._open_session()
+        result = session.set_closing_counted_cash_by_method(
+            {999999: 7.0, self.eur_cash_payment_method.id: 18.0}
+        )
+        self.assertTrue(result["successful"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
+        other_boxes = self.env["pos.session.cash.box"].search(
+            [("session_id", "!=", session.id)]
+        )
+        self.assertFalse(other_boxes.filtered("balance_end_real"))
