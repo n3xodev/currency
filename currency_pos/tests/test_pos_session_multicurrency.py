@@ -565,3 +565,26 @@ class TestPosSessionClosingCounts(TestPosPaymentCurrencyCommon):
         self.assertFalse(result["successful"])
         eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
         self.assertAlmostEqual(eur_box.balance_end_real, 20.0, places=2)
+
+    def test_set_closing_counted_cash_by_method_ignores_draft_orders(self):
+        # The popup calls the RPC before syncing local orders, so draft orders
+        # must not block it; post_closing_cash_details checks them afterwards.
+        session = self._open_session()
+        self.env["pos.order"].create(
+            {
+                "session_id": session.id,
+                "partner_id": self.partner1.id,
+                "amount_total": 10.0,
+                "amount_tax": 0.0,
+                "amount_paid": 0.0,
+                "amount_return": 0.0,
+                "state": "draft",
+                "last_order_preparation_change": "{}",
+            }
+        )
+        result = session.set_closing_counted_cash_by_method(
+            {self.eur_cash_payment_method.id: 18.0}
+        )
+        self.assertTrue(result["successful"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
