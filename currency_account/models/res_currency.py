@@ -24,14 +24,14 @@ class ResCurrency(models.Model):
         )
         if existing:
             return self.env["res.groups"].browse(existing.res_id)
-        category = self.env.ref(
-            "currency_account.module_category_currency_account",
+        privilege = self.env.ref(
+            "currency_account.privilege_currency_account",
             raise_if_not_found=False,
         )
         group = self.env["res.groups"].sudo().create(
             {
                 "name": f"Ver multimoneda: {self.display_name}",
-                "category_id": category.id if category else False,
+                "privilege_id": privilege.id if privilege else False,
             }
         )
         imd.create(

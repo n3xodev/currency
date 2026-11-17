@@ -25,54 +25,36 @@ class AccountInvoiceReport(models.Model):
         )
         return self._currency_account_filter_read_rows(res)
 
-    @api.model
-    def _select(self):
-        select = super()._select()
-        amount_fields = self.env['ir.model.fields'].sudo().search([
-            ('model', '=', 'account.move.line'),
-            ('name', 'like', 'x_amount_currency_%'),
-        ])
-        subtotal_fields = self.env['ir.model.fields'].sudo().search([
-            ('model', '=', 'account.move.line'),
-            ('name', 'like', 'x_subtotal_currency_%'),
-        ])
-        if not amount_fields and not subtotal_fields:
-            return select
+    def _select_list(self, table):
+        select_list = super()._select_list(table)
+        in_out_sign = SQL(
+            "CASE WHEN %s IN ('in_invoice','out_refund','in_receipt')"
+            " THEN -1 ELSE 1 END",
+            table.move_id.move_type,
+        )
+        fields_sudo = self.env['ir.model.fields'].sudo()
         extra = []
         currency_ids_added = set()
-        for af in amount_fields:
-            currency_id = int(af.name.replace('x_amount_currency_', ''))
-            extra.append(SQL(
-                "line.%s * (CASE WHEN move.move_type IN"
-                " ('in_invoice','out_refund','in_receipt')"
-                " THEN -1 ELSE 1 END) AS %s",
-                SQL.identifier(af.name),
-                SQL.identifier(af.name),
-            ))
-            if currency_id not in currency_ids_added:
+        for prefix in ('x_amount_currency_', 'x_subtotal_currency_'):
+            for field in fields_sudo.search([
+                ('model', '=', 'account.move.line'),
+                ('name', 'like', f'{prefix}%'),
+            ]):
+                currency_id = int(field.name.removeprefix(prefix))
                 extra.append(SQL(
-                    "%s AS %s",
-                    currency_id,
-                    SQL.identifier(f'x_currency_id_{currency_id}'),
+                    "%s * %s AS %s",
+                    table[field.name],
+                    in_out_sign,
+                    SQL.identifier(field.name),
                 ))
-                currency_ids_added.add(currency_id)
-        for sf in subtotal_fields:
-            currency_id = int(sf.name.replace('x_subtotal_currency_', ''))
-            extra.append(SQL(
-                "line.%s * (CASE WHEN move.move_type IN"
-                " ('in_invoice','out_refund','in_receipt')"
-                " THEN -1 ELSE 1 END) AS %s",
-                SQL.identifier(sf.name),
-                SQL.identifier(sf.name),
-            ))
-            if currency_id not in currency_ids_added:
-                extra.append(SQL(
-                    "%s AS %s",
-                    currency_id,
-                    SQL.identifier(f'x_currency_id_{currency_id}'),
-                ))
-                currency_ids_added.add(currency_id)
-        return SQL("%s, %s", select, SQL(", ").join(extra))
+                if currency_id not in currency_ids_added:
+                    extra.append(SQL(
+                        "%s AS %s",
+                        currency_id,
+                        SQL.identifier(f'x_currency_id_{currency_id}'),
+                    ))
+                    currency_ids_added.add(currency_id)
+        return [*select_list, *extra]
 
     def _get_view(self, view_id=None, view_type='form', **options):
         arch, view = super()._get_view(view_id, view_type, **options)

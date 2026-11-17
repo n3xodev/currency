@@ -1,13 +1,13 @@
 /** @odoo-module **/
 
-import { Component, toRaw } from "@odoo/owl";
+import { Component, toRaw, useProps } from "@odoo/owl";
 import { onWillRender } from "@web/owl2/utils";
 import {formatMonetary} from "@web/views/fields/formatters";
 import {registry} from "@web/core/registry";
 import {standardFieldProps} from "@web/views/fields/standard_field_props";
 
 export class TaxTotalsCompanyCurrencyWidget extends Component {
-    static props = {...standardFieldProps};
+    props = useProps({...standardFieldProps});
     static template = "currency_account.TaxTotalsCompanyCurrencyWidget";
 
     setup() {
