@@ -53,8 +53,8 @@ class ResCurrencyRate(models.Model):
         max_days_str = (
             self.env["ir.config_parameter"]
             .sudo()
-            .get_param(
-                "currency_old_rate_notify.max_days", default=str(MAX_DAYS_DEFAULT)
+            .get_str(
+                "currency_old_rate_notify.max_days", str(MAX_DAYS_DEFAULT)
             )
         )
         try:
