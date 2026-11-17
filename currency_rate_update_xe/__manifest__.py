@@ -3,7 +3,7 @@
 
 {
     "name": "Currency Rate Update: XE.com",
-    "version": "19.0.1.0.0",
+    "version": "20.0.1.0.0",
     "category": "Financial Management/Configuration",
     "summary": "Update exchange rates using XE.com",
     "author": "Tecnativa, Odoo Community Association (OCA)",

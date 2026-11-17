@@ -1,7 +1,7 @@
 {
     "name": "Multicurrency",
     "icon": "/poweredbyandy_saas/static/description/icon.png",
-    "version": "19.0.1.0.0",
+    "version": "20.0.1.0.0",
     "category": "Extra Tools",
     "summary": "Multimoneda",
     "author": "Andyengit,Odoo Community Association (OCA)",

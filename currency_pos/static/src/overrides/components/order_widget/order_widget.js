@@ -10,14 +10,14 @@
 // change, only the t-inherit target name.
 import { OrderDisplay } from "@point_of_sale/app/components/order_display/order_display";
 import { patch } from "@web/core/utils/patch";
-import { useState, onMounted, onWillUnmount } from "@odoo/owl";
+import { proxy, onMounted, onWillUnmount } from "@odoo/owl";
 import { formatMonetary } from "@web/views/fields/formatters";
 
 patch(OrderDisplay.prototype, {
     setup() {
         super.setup();
         this.pos = this.env.services.pos;
-        this.currencyState = useState({
+        this.currencyState = proxy({
             exchangeCurrencyId: this.pos.getExchangeCurrencyForDisplay()?.id || null,
             updateKey: 0,
         });

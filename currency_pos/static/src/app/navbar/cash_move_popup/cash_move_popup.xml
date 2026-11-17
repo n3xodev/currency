@@ -4,9 +4,9 @@
         <xpath expr="//div[hasclass('input-amount')]" position="before">
             <div t-if="showCashMethodSelector" class="mb-2">
                 <label class="form-label">Cash register</label>
-                <select class="form-select" t-model.number="state.paymentMethodId">
+                <select class="form-select" t-custom-model.number="state.paymentMethodId">
                     <t t-foreach="getCashPaymentMethods()" t-as="cashMethod" t-key="cashMethod.id">
-                        <option t-att-value="cashMethod.id" t-esc="cashMethod.name"/>
+                        <option t-att-value="cashMethod.id" t-out="cashMethod.name"/>
                     </t>
                 </select>
             </div>

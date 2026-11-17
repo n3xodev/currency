@@ -15,18 +15,18 @@
                 t-as="line"
                 t-key="line_index"
             >
-                <t t-esc="line.payment_method_id.name" />
+                <t t-out="line.payment_method_id.name" />
                 <span class="pos-receipt-right-align font-monospace text-end">
                     <t t-if="line.isForeignCurrencyPayment()">
                         <div>
-                            <t t-esc="formatReceiptPaymentForeignAmount(line)" />
+                            <t t-out="formatReceiptPaymentForeignAmount(line)" />
                         </div>
                         <div>
-                            (<t t-esc="formatCurrency(line.getAmount())" />)
+                            (<t t-out="formatCurrency(line.getAmount())" />)
                         </div>
                     </t>
                     <t t-else="">
-                        <t t-esc="formatCurrency(line.getAmount())" />
+                        <t t-out="formatCurrency(line.getAmount())" />
                     </t>
                 </span>
             </div>

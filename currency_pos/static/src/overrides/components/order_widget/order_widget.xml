@@ -10,9 +10,9 @@
         <xpath expr="//div[contains(@class, 'order-summary')]/*[1]" position="before">
             <t t-foreach="getAlternatePricelistTotals()" t-as="altTotal" t-key="altTotal.id">
                 <div class="d-flex justify-content-between w-100 fs-6 text-muted currency_pos_alt_pricelist_total">
-                    <span t-esc="altTotal.name"/>
+                    <span t-out="altTotal.name"/>
                     <span
-                        t-esc="formatAltTotal(altTotal.total, altTotal.currencyId)"
+                        t-out="formatAltTotal(altTotal.total, altTotal.currencyId)"
                         class="alt-pricelist-total"
                     />
                 </div>
@@ -22,7 +22,7 @@
             <t t-if="shouldShowTotalConversion() and getConvertedTotal()">
                 <div class="d-flex justify-content-between w-100 fs-6 text-muted">
                     <span>Total convertido</span>
-                    <span t-esc="getConvertedTotal()" class="converted-total"/>
+                    <span t-out="getConvertedTotal()" class="converted-total"/>
                 </div>
             </t>
         </xpath>

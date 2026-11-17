@@ -18,12 +18,12 @@
     <t t-inherit="point_of_sale.Orderline" t-inherit-mode="extension">
         <xpath expr="//ul[contains(@class, 'info-list')]" position="inside">
             <li t-if="shouldShowConversion() and getConvertedPrice()" class="text-muted small">
-                <t t-esc="getConvertedPrice()"/>
+                <t t-out="getConvertedPrice()"/>
             </li>
         </xpath>
         <xpath expr="//li[@t-if='vals.displayPriceUnit']" position="after">
             <li t-if="shouldShowConversion() and getConvertedUnitPrice()" class="text-muted small">
-                (<t t-esc="getConvertedUnitPrice()"/>)
+                (<t t-out="getConvertedUnitPrice()"/>)
             </li>
         </xpath>
     </t>

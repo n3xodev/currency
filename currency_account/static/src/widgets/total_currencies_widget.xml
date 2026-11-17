@@ -2,7 +2,7 @@
 <templates xml:space="preserve">
     <t t-name="currency_account.TotalCurrenciesWidget">
         <div class="o_total_currencies_widget">
-            <t t-if="totals.length > 0">
+            <t t-if="this.totals.length > 0">
                 <table class="table table-sm">
                     <thead>
                         <tr>
@@ -11,20 +11,20 @@
                                 style="min-width: 100px;"
                             >Total</th>
                             <th
-                                t-if="hasResidual"
+                                t-if="this.hasResidual"
                                 class="text-end"
                                 style="min-width: 100px;"
                             >Pendiente por Pagar</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <t t-foreach="totals" t-as="total" t-key="total_index">
+                        <t t-foreach="this.totals" t-as="total" t-key="total_index">
                             <tr>
                                 <td class="text-end">
-                                    <t t-esc="formatAmount(total, 'total')" />
+                                    <t t-out="this.formatAmount(total, 'total')" />
                                 </td>
-                                <td t-if="hasResidual" class="text-end">
-                                    <t t-esc="formatAmount(total, 'residual')" />
+                                <td t-if="this.hasResidual" class="text-end">
+                                    <t t-out="this.formatAmount(total, 'residual')" />
                                 </td>
                             </tr>
                         </t>
