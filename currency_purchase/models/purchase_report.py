@@ -25,22 +25,20 @@ class PurchaseReport(models.Model):
         )
         return self._currency_account_filter_read_rows(res)
 
-    @api.model
-    def _select(self):
-        select = super()._select()
+    def _select_list(self, table):
+        select_list = super()._select_list(table)
+        extra = []
         amount_fields = self.env['ir.model.fields'].sudo().search([
             ('model', '=', 'purchase.order.line'),
             ('name', 'like', 'x_amount_currency_%'),
         ])
-        if not amount_fields:
-            return select
-        extra = []
         for af in amount_fields:
-            currency_id = int(af.name.replace('x_amount_currency_', ''))
+            currency_id = int(af.name.removeprefix('x_amount_currency_'))
             extra.append(SQL(
-                "SUM(l.%s / COALESCE(po.currency_rate, 1.0))::decimal(16,2)"
-                " * account_currency_table.rate AS %s",
-                SQL.identifier(af.name),
+                "SUM(%s / COALESCE(%s, 1.0))::decimal(16,2) * %s AS %s",
+                table[af.name],
+                table.order_id.currency_rate,
+                table.consolidation_rate,
                 SQL.identifier(af.name),
             ))
             extra.append(SQL(
@@ -48,7 +46,7 @@ class PurchaseReport(models.Model):
                 currency_id,
                 SQL.identifier(f'x_currency_id_{currency_id}'),
             ))
-        return SQL("%s, %s", select, SQL(", ").join(extra))
+        return [*select_list, *extra]
 
     def _get_view(self, view_id=None, view_type='form', **options):
         arch, view = super()._get_view(view_id, view_type, **options)

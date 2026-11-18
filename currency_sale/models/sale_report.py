@@ -1,6 +1,7 @@
 from lxml import etree
 
 from odoo import models, api
+from odoo.tools import SQL
 
 
 class SaleReport(models.Model):
@@ -24,19 +25,20 @@ class SaleReport(models.Model):
         )
         return self._currency_account_filter_read_rows(res)
 
-    def _select_additional_fields(self):
-        res = super()._select_additional_fields()
+    def _select_dict(self, table):
+        res = super()._select_dict(table)
         amount_fields = self.env['ir.model.fields'].sudo().search([
             ('model', '=', 'sale.order.line'),
             ('name', 'like', 'x_amount_currency_%'),
         ])
         for af in amount_fields:
-            currency_id = af.name.replace('x_amount_currency_', '')
-            res[af.name] = (
-                f"CASE WHEN l.product_id IS NOT NULL"
-                f" THEN SUM(l.{af.name}) ELSE 0 END"
+            currency_id = int(af.name.removeprefix('x_amount_currency_'))
+            res[af.name] = SQL(
+                "CASE WHEN %s IS NOT NULL THEN SUM(%s) ELSE 0 END",
+                table.product_id,
+                table[af.name],
             )
-            res[f'x_currency_id_{currency_id}'] = currency_id
+            res[f'x_currency_id_{currency_id}'] = SQL("%s", currency_id)
         return res
 
     def _get_view(self, view_id=None, view_type='form', **options):
