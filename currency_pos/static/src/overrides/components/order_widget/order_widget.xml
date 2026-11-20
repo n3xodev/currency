@@ -8,21 +8,21 @@
 <templates id="template" xml:space="preserve">
     <t t-inherit="point_of_sale.OrderDisplay" t-inherit-mode="extension">
         <xpath expr="//div[contains(@class, 'order-summary')]/*[1]" position="before">
-            <t t-foreach="getAlternatePricelistTotals()" t-as="altTotal" t-key="altTotal.id">
+            <t t-foreach="this.getAlternatePricelistTotals()" t-as="altTotal" t-key="altTotal.id">
                 <div class="d-flex justify-content-between w-100 fs-6 text-muted currency_pos_alt_pricelist_total">
                     <span t-out="altTotal.name"/>
                     <span
-                        t-out="formatAltTotal(altTotal.total, altTotal.currencyId)"
+                        t-out="this.formatAltTotal(altTotal.total, altTotal.currencyId)"
                         class="alt-pricelist-total"
                     />
                 </div>
             </t>
         </xpath>
         <xpath expr="//div[contains(@class, 'order-summary')]" position="inside">
-            <t t-if="shouldShowTotalConversion() and getConvertedTotal()">
+            <t t-if="this.shouldShowTotalConversion() and this.getConvertedTotal()">
                 <div class="d-flex justify-content-between w-100 fs-6 text-muted">
                     <span>Total convertido</span>
-                    <span t-out="getConvertedTotal()" class="converted-total"/>
+                    <span t-out="this.getConvertedTotal()" class="converted-total"/>
                 </div>
             </t>
         </xpath>

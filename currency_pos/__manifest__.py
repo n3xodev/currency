@@ -50,8 +50,11 @@
             "currency_pos/static/src/app/screens/payment_screen/payment_screen.xml",
             "currency_pos/static/src/app/screens/payment_screen/payment_lines/payment_lines.js",
             "currency_pos/static/src/app/screens/payment_screen/payment_status/payment_status.js",
-            "currency_pos/static/src/app/screens/receipt_screen/receipt/order_receipt.js",
-            "currency_pos/static/src/app/screens/receipt_screen/receipt/order_receipt.xml",
+            # TODO(TP.3): point_of_sale.OrderReceipt is gone in Odoo 20 (receipts are
+            # built server-side); re-add these two assets once the receipt data is
+            # ported. Importing the missing module would break the POS bundle start.
+            # "currency_pos/static/src/app/screens/receipt_screen/receipt/order_receipt.js",
+            # "currency_pos/static/src/app/screens/receipt_screen/receipt/order_receipt.xml",
             "currency_pos/static/src/app/store/opening_control_popup/opening_control_popup.js",
             "currency_pos/static/src/app/store/opening_control_popup/opening_control_popup.xml",
             "currency_pos/static/src/app/navbar/cash_move_popup/cash_move_popup.js",

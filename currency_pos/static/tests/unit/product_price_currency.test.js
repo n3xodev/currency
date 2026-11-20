@@ -25,7 +25,7 @@ function buildModels({ rates = [], currencies = [] }, companyCurrencyId = 1) {
 }
 
 describe("currency_pos product price conversion", () => {
-    test("formula surcharge converts from rule currency to pos currency", () => {
+    test("markup (surcharge) converts from rule currency to pos currency", () => {
         const usd = { id: 1, decimal_places: 2, rate: 1, inverse_rate: 1 };
         const eur = { id: 2, decimal_places: 2, rate: 2.0, inverse_rate: 0.5 };
         const models = buildModels({ currencies: [usd, eur] });

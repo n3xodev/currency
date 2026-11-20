@@ -1,21 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Odoo 19 rewrote the pricelists block from a <table>/<tr>/<td> layout to a
-    CSS-grid <div>/<label>/<span> layout (no <table> exists here anymore),
-    so the old table-based xpath never matched. Replace the grid div instead,
-    keeping the same label/span structure and enriching the span with the
-    secondary-currency price line.
+    Odoo 20 renders the pricelists as a CSS-grid <div> of <label>/<span> pairs
+    iterating `productInfo.pricelists`. Replace that grid, keeping the same
+    structure and adding the secondary-currency price line.
 -->
 <templates id="template" xml:space="preserve">
     <t t-inherit="point_of_sale.ProductInfoPopup" t-inherit-mode="extension">
-        <xpath expr="//div[contains(@class, 'grid') and ./t[@t-foreach='props.info.productInfo.pricelists']]" position="replace">
+        <xpath expr="//div[contains(@class, 'grid') and ./t[@t-foreach='productInfo.pricelists']]" position="replace">
             <div class="grid gap-2 mt-3">
-                <t t-foreach="props.info.productInfo.pricelists" t-as="pricelist" t-key="pricelist.name">
+                <t t-foreach="productInfo.pricelists" t-as="pricelist" t-key="pricelist.name">
                     <label class="fw-bold" t-out="pricelist.name"/>
                     <span>
-                        <t t-out="getPricelistPriceLabel(pricelist)"/>
-                        <div t-if="getPricelistSecondaryPrice(pricelist)" class="text-muted small">
-                            <t t-out="getPricelistSecondaryPrice(pricelist)"/>
+                        <t t-out="this.getPricelistPriceLabel(pricelist)"/>
+                        <div t-if="this.getPricelistSecondaryPrice(pricelist)" class="text-muted small">
+                            <t t-out="this.getPricelistSecondaryPrice(pricelist)"/>
                         </div>
                     </span>
                 </t>
