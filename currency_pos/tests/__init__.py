@@ -5,6 +5,7 @@ from . import test_pos_session_multicurrency
 from . import test_pos_cash_boxes
 from . import test_pos_session_closing
 from . import test_pos_closing_counts_tour
+from . import test_pos_invoice_currency
 from . import test_pos_closing_accounts
 from . import test_pos_closing_company_currency
 from . import test_pos_closing_popup
