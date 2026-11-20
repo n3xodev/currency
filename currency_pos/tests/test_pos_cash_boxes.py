@@ -158,3 +158,22 @@ class TestPosCashBoxes(TestPosPaymentCurrencyCommon):
         eur_box.balance_end_real = 123.0
         session._validate_session_accounting()
         self.assertAlmostEqual(eur_box.balance_end_real, 123.0, places=2)
+
+    def test_opening_answers_with_the_reloaded_session(self):
+        self.config = self.multi_currency_config
+        self.multi_currency_config.open_ui()
+        session = self.multi_currency_config.current_session_id
+        values = {self.cash_payment_method.id: 5.0, self.eur_cash_payment_method.id: 20.0}
+        result = session.oca_set_opening_control(values, False)
+        self.assertEqual(session.state, "opened")
+        self.assertEqual([row["id"] for row in result["pos.session"]], session.ids)
+        self.assertEqual(
+            result["pos.session"][0]["_oca_cash_box_openings"][self.eur_cash_payment_method.id],
+            20.0,
+        )
+        # Opening again (second device) gives the same answer without touching the boxes.
+        again = session.oca_set_opening_control({self.eur_cash_payment_method.id: 99.0}, False)
+        self.assertEqual([row["id"] for row in again["pos.session"]], session.ids)
+        self.assertAlmostEqual(
+            session._oca_get_cash_box(self.eur_cash_payment_method).balance_start, 20.0, places=2
+        )

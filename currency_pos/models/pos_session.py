@@ -245,7 +245,8 @@ class PosSession(models.Model):
         """
         self.ensure_one()
         if self.state != "opening_control":
-            return
+            # Same answer as core's `set_opening_control` for an opened session.
+            return self.set_opening_control(0.0, notes)
         values = self._oca_normalize_cashbox_values(cashbox_values)
         self._oca_ensure_cash_boxes()
         primary = self._oca_primary_cash_payment_method()
@@ -253,7 +254,7 @@ class PosSession(models.Model):
             if cash_box.payment_method_id.id in values:
                 cash_box.balance_start = values[cash_box.payment_method_id.id]
         principal_amount = values.get(primary.id, 0.0) if primary else 0.0
-        self.with_context(oca_cashbox_values=values).set_opening_control(
+        return self.with_context(oca_cashbox_values=values).set_opening_control(
             principal_amount,
             notes,
         )
