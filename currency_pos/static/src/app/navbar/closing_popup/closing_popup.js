@@ -8,11 +8,6 @@ import {
 } from "../../utils/payment_currency_utils";
 import { MoneyDetailsPopup } from "@point_of_sale/app/components/popups/money_details_popup/money_details_popup";
 import { _t } from "@web/core/l10n/translation";
-import { parseFloat } from "@web/views/fields/parsers";
-import { ConnectionLostError } from "@web/core/network/rpc";
-import { deduceUrl } from "@point_of_sale/utils";
-
-ClosePosPopup.props = [...ClosePosPopup.props, "cash_details?"];
 
 patch(ClosePosPopup.prototype, {
     setup() {
@@ -20,14 +15,69 @@ patch(ClosePosPopup.prototype, {
         super.setup();
     },
 
+    /**
+     * Cash boxes of the session. Odoo 20 declares the popup props with
+     * `useProps`, so a `cash_details` prop of its own would not be readable:
+     * the server nests the list in `default_cash_details.cash_details`.
+     */
     getCashDetailsList() {
-        if (this.props.cash_details?.length) {
-            return this.props.cash_details;
+        const cashDetails = this.props.default_cash_details?.cash_details;
+        if (cashDetails?.length) {
+            return cashDetails;
         }
         if (this.props.default_cash_details?.id) {
             return [this.props.default_cash_details];
         }
         return [];
+    },
+
+    _parseCounted(counted) {
+        if (!this.pos.isValidFloat(counted)) {
+            return NaN;
+        }
+        try {
+            return this.pos.parseCurrency(counted);
+        } catch {
+            return NaN;
+        }
+    },
+
+    parseValidCounted(counted) {
+        const parsed = this._parseCounted(counted);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    },
+
+    /** Counted amount as the input shows it: in the currency of the method. */
+    _formatCountedInput(amount, paymentMethodData) {
+        if (paymentMethodData?.has_foreign_currency) {
+            const paymentCurrency = this._getPaymentCurrencyRecord(paymentMethodData);
+            return formatFloat(amount, {
+                digits: [true, paymentCurrency?.decimal_places ?? this.pos.currency.decimal_places],
+            });
+        }
+        return this.pos.formatCurrency(amount || 0, this.pos.config.currency_id.id, {
+            noSymbol: true,
+        });
+    },
+
+    getCurrencyPosition(paymentMethodData) {
+        return paymentMethodData?.has_foreign_currency ? "after" : this.pos.currency.position;
+    },
+
+    handleCashBoxCountBlur(cashDetails) {
+        this.handlePaymentCountBlur(cashDetails.id);
+        this.setManualCashInput(this.state.payments[cashDetails.id].counted, cashDetails.id);
+    },
+
+    handlePaymentCountBlur(paymentId) {
+        const paymentMethodData = this._getClosingPaymentMethodData(paymentId);
+        const parsed = this._parseCounted(this.state.payments[paymentId].counted);
+        if (!Number.isNaN(parsed)) {
+            this.state.payments[paymentId].counted = this._formatCountedInput(
+                parsed,
+                paymentMethodData
+            );
+        }
     },
 
     _getClosingPaymentMethodData(paymentId) {
@@ -64,11 +114,7 @@ patch(ClosePosPopup.prototype, {
     },
 
     _parseClosingCountedAmount(paymentId) {
-        const counted = this.state.payments[paymentId]?.counted;
-        if (!this.env.utils.isValidFloat(counted)) {
-            return NaN;
-        }
-        return this.env.utils.parseValidFloat(counted);
+        return this._parseCounted(this.state.payments[paymentId]?.counted);
     },
 
     getExpectedClosingCount(paymentMethodData) {
@@ -110,13 +156,12 @@ patch(ClosePosPopup.prototype, {
             return "0";
         }
         if (paymentMethodData.has_foreign_currency) {
-            const amount = this.getExpectedClosingCount(paymentMethodData);
-            const paymentCurrency = this._getPaymentCurrencyRecord(paymentMethodData);
-            const decimalPlaces =
-                paymentCurrency?.decimal_places ?? this.pos.currency.decimal_places;
-            return formatFloat(amount, { digits: [true, decimalPlaces] });
+            return this._formatCountedInput(
+                this.getExpectedClosingCount(paymentMethodData),
+                paymentMethodData
+            );
         }
-        return this.env.utils.formatCurrency(paymentMethodData.amount, false);
+        return this._formatCountedInput(paymentMethodData.amount, paymentMethodData);
     },
 
     formatClosingPaymentAmount(paymentMethodData) {
@@ -126,7 +171,7 @@ patch(ClosePosPopup.prototype, {
         if (paymentMethodData.type === "cash" || paymentMethodData.moves) {
             return this.formatClosingCashExpected(paymentMethodData);
         }
-        const orderAmount = this.env.utils.formatCurrency(paymentMethodData.amount);
+        const orderAmount = this.pos.formatCurrency(paymentMethodData.amount);
         if (!paymentMethodData.has_foreign_currency) {
             return orderAmount;
         }
@@ -146,7 +191,7 @@ patch(ClosePosPopup.prototype, {
 
     formatClosingCashExpected(paymentMethodData) {
         if (!paymentMethodData?.has_foreign_currency) {
-            return this.env.utils.formatCurrency(paymentMethodData.amount);
+            return this.pos.formatCurrency(paymentMethodData.amount);
         }
         const symbol =
             paymentMethodData.payment_currency_symbol ||
@@ -163,7 +208,7 @@ patch(ClosePosPopup.prototype, {
 
     formatClosingCashOpening(paymentMethodData) {
         if (!paymentMethodData?.has_foreign_currency) {
-            return this.env.utils.formatCurrency(paymentMethodData.opening);
+            return this.pos.formatCurrency(paymentMethodData.opening);
         }
         const symbol =
             paymentMethodData.payment_currency_symbol ||
@@ -180,7 +225,7 @@ patch(ClosePosPopup.prototype, {
 
     formatClosingPaymentSubAmount(paymentMethodData) {
         if (!paymentMethodData?.has_foreign_currency) {
-            return this.env.utils.formatCurrency(
+            return this.pos.formatCurrency(
                 Math.abs(paymentMethodData?.payment_amount || 0)
             );
         }
@@ -188,7 +233,7 @@ patch(ClosePosPopup.prototype, {
             paymentMethodData.payment_currency_symbol ||
             paymentMethodData.payment_currency_name ||
             "";
-        const orderAmount = this.env.utils.formatCurrency(
+        const orderAmount = this.pos.formatCurrency(
             Math.abs(paymentMethodData.payment_amount || 0)
         );
         const paymentCurrency = this._getPaymentCurrencyRecord(paymentMethodData);
@@ -204,7 +249,7 @@ patch(ClosePosPopup.prototype, {
 
     formatClosingCountedDisplay(paymentMethodData, counted) {
         if (!paymentMethodData?.has_foreign_currency) {
-            return this.env.utils.formatCurrency(counted);
+            return this.pos.formatCurrency(counted);
         }
         const symbol =
             paymentMethodData.payment_currency_symbol ||
@@ -220,8 +265,12 @@ patch(ClosePosPopup.prototype, {
     formatClosingDifferenceDisplay(paymentMethodData, paymentId) {
         const paymentMethod = paymentMethodData || this._getClosingPaymentMethodData(paymentId);
         const normalizedId = Number(paymentId);
+        if (!this.state.payments[normalizedId]) {
+            // Methods that are not counted (customer account, ...) have no difference.
+            return this.pos.formatCurrency(0);
+        }
         if (!paymentMethod?.has_foreign_currency) {
-            return this.env.utils.formatCurrency(this.getDifference(normalizedId));
+            return this.pos.formatCurrency(this.getDifference(normalizedId));
         }
         const diffForeign = this.getForeignCountDifference(paymentMethod, normalizedId);
         const symbol =
@@ -232,7 +281,7 @@ patch(ClosePosPopup.prototype, {
         const decimalPlaces =
             paymentCurrency?.decimal_places ?? this.pos.currency.decimal_places;
         const formattedDiff = formatFloat(diffForeign, { digits: [true, decimalPlaces] });
-        const orderDiff = this.env.utils.formatCurrency(
+        const orderDiff = this.pos.formatCurrency(
             this._convertForeignCountDifferenceToOrderCurrency(diffForeign, paymentMethod)
         );
         return `${formattedDiff} ${symbol} (${orderDiff})`.trim();
@@ -284,9 +333,7 @@ patch(ClosePosPopup.prototype, {
         this.props.non_cash_payment_methods.forEach((pm) => {
             if (pm.type === "bank") {
                 initialState.payments[pm.id] = {
-                    counted: pm.has_foreign_currency
-                        ? this.formatClosingCountInput(pm)
-                        : this.env.utils.formatCurrency(pm.amount, false),
+                    counted: this.formatClosingCountInput(pm),
                 };
             }
         });
@@ -299,11 +346,11 @@ patch(ClosePosPopup.prototype, {
             return;
         }
         this.state.payments[details.id].counted = this.formatClosingCountInput(details);
-        this.setManualCashInput(this.getExpectedClosingCount(details), details.id);
+        this.setManualCashInput(this.state.payments[details.id].counted, details.id);
     },
 
     setManualCashInput(amount, paymentMethodId) {
-        if (this.env.utils.isValidFloat(amount)) {
+        if (this.pos.isValidFloat(amount)) {
             const methodId = paymentMethodId || this.props.default_cash_details?.id;
             if (methodId && this.moneyDetailsByMethod[methodId]) {
                 this.state.notes = "";
@@ -321,20 +368,16 @@ patch(ClosePosPopup.prototype, {
             return;
         }
         const action = _t("Cash control - closing");
-        this.hardwareProxy.openCashbox(action);
+        await this.pos.openCashbox(action);
         this.dialog.add(MoneyDetailsPopup, {
             moneyDetails: this.moneyDetailsByMethod[details.id] || null,
             action: action,
             getPayload: (payload) => {
                 const { total, moneyDetailsNotes, moneyDetails } = payload;
-                this.state.payments[details.id].counted = details.has_foreign_currency
-                    ? formatFloat(total, {
-                          digits: [
-                              true,
-                              this._getPaymentCurrencyRecord(details)?.decimal_places ?? 2,
-                          ],
-                      })
-                    : this.env.utils.formatCurrency(total, false);
+                this.state.payments[details.id].counted = this._formatCountedInput(
+                    total,
+                    details
+                );
                 if (moneyDetailsNotes) {
                     this.state.notes = moneyDetailsNotes;
                 }
@@ -363,94 +406,5 @@ patch(ClosePosPopup.prototype, {
         const counted = this._parseClosingCountedAmount(normalizedId);
         const expectedAmount = this.getExpectedClosingCount(paymentMethodData);
         return counted - expectedAmount;
-    },
-
-    async closeSession() {
-        this.pos._resetConnectedCashier();
-        if (this.pos.config.customer_display_type === "proxy") {
-            const proxyIP = this.pos.getDisplayDeviceIP();
-            fetch(`${deduceUrl(proxyIP)}/hw_proxy/customer_facing_display`, {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ params: { action: "close" } }),
-                targetAddressSpace: odoo.use_lna ? "local" : undefined,
-            }).catch(() => {
-                console.log("Failed to send data to customer display");
-            });
-        }
-        // Odoo 19 renamed push_orders_with_closing_popup() to
-        // pushOrdersWithClosingPopup().
-        const syncSuccess = await this.pos.pushOrdersWithClosingPopup();
-        if (!syncSuccess) {
-            return;
-        }
-        if (this.pos.config.cash_control) {
-            const cashDetailsList = this.getCashDetailsList();
-            const primary = cashDetailsList[0] || this.props.default_cash_details;
-            const countedCashByMethod = {};
-            for (const cashDetails of cashDetailsList) {
-                countedCashByMethod[cashDetails.id] = this.env.utils.parseValidFloat(
-                    this.state.payments[cashDetails.id].counted
-                );
-            }
-            const response = await this.pos.data.call(
-                "pos.session",
-                "post_closing_cash_details",
-                [this.pos.session.id],
-                {
-                    counted_cash: countedCashByMethod[primary.id],
-                    counted_cash_by_method: countedCashByMethod,
-                }
-            );
-
-            if (!response.successful) {
-                return this.handleClosingError(response);
-            }
-        }
-
-        try {
-            await this.pos.data.call("pos.session", "update_closing_control_state_session", [
-                this.pos.session.id,
-                this.state.notes,
-            ]);
-        } catch (error) {
-            if (!error.data && error.data.message !== "This session is already closed.") {
-                throw error;
-            }
-        }
-
-        try {
-            const bankPaymentMethodDiffPairs = this.props.non_cash_payment_methods
-                .filter((pm) => pm.type == "bank")
-                .map((pm) => [pm.id, this.getDifference(pm.id)]);
-            const response = await this.pos.data.call(
-                "pos.session",
-                "close_session_from_ui",
-                [this.pos.session.id, bankPaymentMethodDiffPairs],
-                {
-                    // Odoo 19's close_session_from_ui reads
-                    // context.device_identifier (self.env.context.get(
-                    // 'device_identifier', False)); login_number is no
-                    // longer read there, so passing it silently sent
-                    // nothing useful to the backend.
-                    context: {
-                        device_identifier: this.pos.device.identifier,
-                    },
-                }
-            );
-            if (!response.successful) {
-                return this.handleClosingError(response);
-            }
-            localStorage.removeItem(`pos.session.${odoo.pos_config_id}`);
-            location.reload();
-        } catch (error) {
-            if (error instanceof ConnectionLostError) {
-                throw error;
-            }
-            await this.handleClosingControlError();
-        }
     },
 });
