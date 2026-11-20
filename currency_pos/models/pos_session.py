@@ -1,4 +1,4 @@
-from odoo import _, api, fields, models
+from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 
 
@@ -462,3 +462,115 @@ class PosSession(models.Model):
                 self._oca_closing_payment_method_amounts(payment_method, method_payments)
             )
         return data
+
+    # CORE COPY: odoo/addons/point_of_sale/models/pos_session.py, lines 1015-1146
+    # (`_create_session_account_move`), image odoo:20.0@sha256:8bcae4c1f895683ee851e19dd3e7d999e81e770defe9015bc9dad8bbf10f2b0d.
+    # Only change: the single cash payment method check (core line 1056) is removed.
+    # Re-diff against core on every upgrade of the base image.
+    def _create_session_account_move(self, orders):
+        """Session closing receipt, copied from Odoo 20's point_of_sale.
+
+        The only change is the removed "Only one cash payment method can be used
+        in a session" check (point_of_sale/models/pos_session.py, same method):
+        every cash box is a cash payment method of the session. Core has no hook
+        for it, so compare this method with core when upgrading.
+        """
+        if not orders:
+            return self.env['account.move']
+
+        refund = orders[0].is_refund_or_negative()  # All orders are refunds or not
+        AccountJournal = self.env['account.journal'].with_company(
+            self.company_id,
+        )
+        journal = AccountJournal._ensure_company_account_journal()
+        config_journal = self.config_id.journal_id
+        if self.config_id.journal_id != journal and config_journal.type != 'sale':
+            self.config_id.journal_id = journal
+
+        # product_commands => invoice_line_ids (display_type=product, net price_unit)
+        lines = orders.with_context(hide_combo_title=True)._prepare_account_move_line_data()
+        lines_commands = [Command.create(line['account.move.line']) for line in lines]
+
+        payments = orders._prepare_account_move_line_data_for_payments()
+        line_data = [pm['account.move.line'] for pm in payments]
+        payment_commands = [Command.create(pm_data) for pm_data in line_data]
+        extra_commands = self._prepare_session_closing_extra_line_commands(
+            orders,
+            refund,
+            payments,
+        )
+
+        # Ensure rounding method record is set on the invoice if needed
+        rounding_method = self.config_id._get_rounding_method_for_invoice(orders)
+        move_vals = self._prepare_session_move_vals(orders)
+        move_vals.update({
+            'invoice_line_ids': lines_commands,
+            'line_ids': payment_commands,
+            'invoice_cash_rounding_id': rounding_method.id,
+        })
+        move = self.env['account.move'].sudo().with_context(
+            check_move_validity=False,
+            linked_to_pos=True,
+        ).create(move_vals)
+
+        move_ctx = move.with_context(
+            linked_to_pos=True,
+            skip_invoice_sync=True,
+        )
+
+        if len(extra_commands) > 0:
+            move_ctx.with_context(
+                check_move_validity=False,
+            ).write({'line_ids': extra_commands})
+
+        payment_term_lines = move.line_ids.filtered(
+            lambda line: line.display_type == 'payment_term',
+        )
+
+        with move_ctx._check_balanced({'records': move}):
+            if rounding_method.exists():
+                data = orders._prepare_account_move_line_data_for_rounding(move)
+                move_ctx.line_ids = data
+
+            # A rounded foreign-currency payment converts to a slightly different company-currency
+            # total than the sum of individually converted product/tax balances. Absorb the diff.
+            summary = sum(move.line_ids.mapped('balance'))
+            balance_diff = self.company_id.currency_id.round(summary)
+            if move.currency_id != self.company_id.currency_id and balance_diff:
+                if balance_diff:
+                    payment_term_lines = move.line_ids.filtered(
+                        lambda line: line.display_type == 'payment_term',
+                    )
+                    if payment_term_lines:
+                        payment_term_lines[0].balance -= balance_diff
+
+        move_ctx.with_company(self.company_id)._post()
+        default_partner = self.config_id.default_partner_id
+        receivable_account = self._get_receivable_account()
+
+        # The payment_term lines are created in the same order as the
+        # payments, pair them so each payment is reconciled with its own
+        # term line. We cannot reconcile automatically all lines together
+        # because sometime it create weird reconciliation with multiple payments
+        for payment, term in zip(payments, payment_term_lines.sorted('id')):
+            metadata = payment['metadata']
+            pm = metadata['payment_method_id']
+            payment_line = pm._create_payment_line(
+                self,
+                metadata['amount'],
+                receivable_account,
+                False,
+                metadata['partner'] or default_partner,
+                metadata['foreign_currency_id'].id,
+                metadata['amount_currency'],
+            )
+            to_reconcile = (payment_line + term).filtered(
+                lambda line: not line.reconciled,
+            )
+            if len(to_reconcile) > 1:
+                to_reconcile.with_context(
+                    skip_invoice_sync=True,
+                    no_cash_basis=True,
+                ).sudo().reconcile()
+
+        return move

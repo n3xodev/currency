@@ -31,6 +31,14 @@ class PosPayment(models.Model):
         index=True,
     )
 
+    oca_core_foreign_mirrored = fields.Boolean(
+        string="Core Foreign Fields Set By Currency POS",
+        copy=False,
+        help="Technical flag: core's foreign currency fields of the payment were "
+        "written by this module (not by a client of core), so they can be cleared "
+        "when the payment goes back to the order currency.",
+    )
+
     @api.depends("payment_currency_id", "currency_id")
     def _compute_is_foreign_currency_payment(self):
         for payment in self:
@@ -129,6 +137,32 @@ class PosPayment(models.Model):
                     payment.company_id,
                     payment_date,
                 )
+
+            # Odoo 20 builds the session closing entries from its own foreign
+            # currency fields: keep them in sync when this module knows a foreign
+            # payment currency. A payment in the order currency leaves core's fields
+            # alone (a client of core may have set them on its own), unless this
+            # module wrote them earlier.
+            if payment_currency != order_currency:
+                foreign_amount = values.get(
+                    "payment_currency_amount", payment.payment_currency_amount
+                )
+                core_values = {
+                    "foreign_currency_id": payment_currency.id,
+                    "amount_currency": foreign_amount or 0.0,
+                }
+                if not payment.oca_core_foreign_mirrored:
+                    values["oca_core_foreign_mirrored"] = True
+            elif payment.oca_core_foreign_mirrored:
+                core_values = {"foreign_currency_id": False, "amount_currency": 0.0}
+                values["oca_core_foreign_mirrored"] = False
+            else:
+                core_values = {}
+            for field_name, value in core_values.items():
+                current = payment[field_name]
+                current = current.id if hasattr(current, "id") else current
+                if current != value:
+                    values[field_name] = value
 
             if values:
                 super(PosPayment, payment).write(values)
