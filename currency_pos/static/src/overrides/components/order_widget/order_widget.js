@@ -12,11 +12,12 @@ import { OrderDisplay } from "@point_of_sale/app/components/order_display/order_
 import { patch } from "@web/core/utils/patch";
 import { proxy, onMounted, onWillUnmount } from "@odoo/owl";
 import { formatMonetary } from "@web/views/fields/formatters";
+import { usePos } from "@point_of_sale/app/hooks/pos_hook";
 
 patch(OrderDisplay.prototype, {
     setup() {
-        super.setup();
-        this.pos = this.env.services.pos;
+        super.setup(...arguments);
+        this.pos = usePos();
         this.currencyState = proxy({
             exchangeCurrencyId: this.pos.getExchangeCurrencyForDisplay()?.id || null,
             updateKey: 0,
@@ -95,7 +96,7 @@ patch(OrderDisplay.prototype, {
     },
 
     getAlternatePricelistTotals() {
-        if (this.pos.router?.state?.current !== "ProductScreen") {
+        if (this.pos.router?.currentScreen?.() !== "ProductScreen") {
             return [];
         }
         const order = this.pos.getOrder();

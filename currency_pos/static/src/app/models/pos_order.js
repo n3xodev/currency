@@ -61,12 +61,12 @@ patch(PosOrder.prototype, {
                 return false;
             }
             if (typeof paymentMethod === "object") {
-                return Boolean(paymentMethod.is_cash_count);
+                return paymentMethod.type === "cash";
             }
             const paymentMethodRecord = this.models["pos.payment.method"].find(
                 (method) => method.id === paymentMethod
             );
-            return Boolean(paymentMethodRecord?.is_cash_count);
+            return paymentMethodRecord?.type === "cash";
         });
     },
 

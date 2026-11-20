@@ -249,8 +249,8 @@ patch(PosStore.prototype, {
             const standardPrice = product.standard_price;
             const priceWithoutTax = result.productInfo.all_prices.price_without_tax;
             const margin = priceWithoutTax - standardPrice;
-            result.costCurrency = this.env.utils.formatCurrency(standardPrice);
-            result.marginCurrency = this.env.utils.formatCurrency(margin);
+            result.costCurrency = this.formatCurrency(standardPrice);
+            result.marginCurrency = this.formatCurrency(margin);
             result.marginPercent = priceWithoutTax
                 ? Math.round((margin / priceWithoutTax) * 10000) / 100
                 : 0;
