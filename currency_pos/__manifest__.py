@@ -21,6 +21,7 @@
         "views/pos_payment_method_views.xml",
         "views/pos_payment_views.xml",
         "views/pos_order_views.xml",
+        "receipt/pos_order_receipt.xml",
         'security/ir.access.csv',
     ],
     "assets": {
