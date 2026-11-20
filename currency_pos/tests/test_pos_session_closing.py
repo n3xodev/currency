@@ -2,6 +2,7 @@ from odoo.tests import tagged
 
 from .common import TestPosPaymentCurrencyCommon
 
+
 @tagged("post_install", "-at_install", "currency_pos")
 class TestPosSessionClosing(TestPosPaymentCurrencyCommon):
     @classmethod
@@ -122,6 +123,120 @@ class TestPosSessionClosing(TestPosPaymentCurrencyCommon):
             lambda line: line.display_type == "payment_term"
         )
         self.assertTrue(all(line.reconciled for line in term_lines))
+
+    def test_secondary_box_difference_is_booked_on_its_journal(self):
+        self.config = self.multi_currency_config
+        session = self.open_new_session(0)
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        eur_box.balance_start = 20.0
+        session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 0.0,
+                self.eur_cash_payment_method.id: 18.0,
+            }
+        )
+        self.assertAlmostEqual(eur_box.closing_difference, -2.0, places=2)
+        eur_lines = session._oca_statement_lines(self.eur_cash_journal)
+        self.assertEqual(len(eur_lines), 1)
+        self.assertAlmostEqual(eur_lines.amount, -2.0, places=2)
+        self.assertIn(
+            self.eur_cash_journal.loss_account_id,
+            eur_lines.move_id.line_ids.account_id,
+        )
+        self.assertFalse(session._oca_statement_lines(self.cash_payment_method.journal_id))
+
+    def test_foreign_cash_out_does_not_create_usd_difference(self):
+        """Cash out on foreign journal must not post a primary (USD) cash difference.
+
+        Reproduces POS/00017: opened/closed USD at 5.00 with a VES/EUR cash-out
+        incorrectly shifted the primary expected balance and booked a fake profit.
+        """
+        self.config = self.multi_currency_config
+        self.multi_currency_config.open_ui()
+        session = self.multi_currency_config.current_session_id
+        session.oca_set_opening_control(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 1010.0,
+            },
+            False,
+        )
+        session.try_cash_in_out(
+            "out",
+            1000.0,
+            "SOBRANTE",
+            False,
+            {
+                "translatedType": "out",
+                "formattedAmount": "1000.00",
+                "payment_method_id": self.eur_cash_payment_method.id,
+            },
+        )
+        session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 10.0,
+            }
+        )
+        self.assertEqual(session.state, "closed")
+        primary_box = session._oca_get_cash_box(self.cash_payment_method)
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(primary_box.closing_difference, 0.0, places=2)
+        self.assertAlmostEqual(eur_box.closing_difference, 0.0, places=2)
+
+        # Odoo 20 books the opening count of the primary box as a cash line; the
+        # foreign cash out must not add a closing difference to it.
+        usd_lines = session._oca_statement_lines(self.cash_payment_method.journal_id)
+        self.assertEqual(usd_lines.mapped("amount"), [5.0])
+        eur_lines = session._oca_statement_lines(self.eur_cash_journal)
+        self.assertEqual(len(eur_lines), 1)
+        self.assertAlmostEqual(eur_lines.amount, -1000.0, places=2)
+
+    def test_foreign_bank_difference_is_counted_in_the_method_currency(self):
+        self.config = self.multi_currency_config
+        bank_journal = self.eur_bank_payment_method.journal_id
+        profit_account = self.company.default_cash_difference_income_account_id
+        loss_account = self.company.default_cash_difference_expense_account_id
+        bank_journal.write(
+            {"profit_account_id": profit_account.id, "loss_account_id": loss_account.id}
+        )
+        session = self.open_new_session(0)
+        self._pay_order([(self.eur_bank_payment_method, 100.0)])
+        # 100.00 in the order currency = 200.00 EUR (rate 2.0); 10.00 EUR are missing.
+        session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 0.0,
+                self.eur_bank_payment_method.id: 190.0,
+            }
+        )
+        self.assertEqual(session.state, "closed")
+        correction = session.correction_move_ids
+        self.assertEqual(len(correction), 1)
+        self.assertIn(loss_account, correction.line_ids.account_id)
+        self.assertAlmostEqual(
+            sum(correction.line_ids.filtered(lambda line: line.debit).mapped("debit")),
+            5.0,
+            places=2,
+        )
+        # The difference is booked in the order (company) currency, not as 5 EUR: the
+        # lines are in USD with amount_currency equal to the balance (the move header
+        # keeps the EUR of the journal, as core creates it).
+        self.assertEqual(correction.line_ids.mapped("currency_id"), self.usd_currency)
+        self.assertEqual(sorted(correction.line_ids.mapped("amount_currency")), [-5.0, 5.0])
+        self.assertEqual(sorted(correction.line_ids.mapped("balance")), [-5.0, 5.0])
+
+    def test_foreign_bank_exact_count_has_no_difference(self):
+        self.config = self.multi_currency_config
+        session = self.open_new_session(0)
+        self._pay_order([(self.eur_bank_payment_method, 100.0)])
+        session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 0.0,
+                self.eur_bank_payment_method.id: 200.0,
+            }
+        )
+        self.assertEqual(session.state, "closed")
+        self.assertFalse(session.correction_move_ids)
 
     def test_bank_payment_outstanding_follows_inbound_outbound_lines(self):
         inbound = self.eur_bank_journal.inbound_payment_method_line_ids[:1]
