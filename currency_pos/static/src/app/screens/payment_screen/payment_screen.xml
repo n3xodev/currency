@@ -3,31 +3,16 @@
     <t t-inherit="point_of_sale.PaymentScreenPaymentLines" t-inherit-mode="extension">
         <xpath expr="//span[hasclass('payment-name')]/following-sibling::div[hasclass('payment-amount')]" position="replace">
             <div class="payment-amount px-3 text-end">
-                <t t-if="line.isForeignCurrencyPayment and line.isForeignCurrencyPayment()">
+                <t t-if="line.isForeignCurrencyPayment?.()">
                     <div class="lh-sm">
-                        <t t-out="getPaymentLineForeignAmountDisplay(line)"/>
+                        <t t-out="this.getPaymentLineForeignAmountDisplay(line)"/>
                     </div>
                     <div class="small text-muted lh-sm">
-                        <t t-out="getPaymentLineOrderAmountDisplay(line)"/>
+                        <t t-out="this.getPaymentLineOrderAmountDisplay(line)"/>
                     </div>
                 </t>
                 <t t-else="">
-                    <t t-out="getPaymentLineOrderAmountDisplay(line)"/>
-                </t>
-            </div>
-        </xpath>
-        <xpath expr="//div[hasclass('bg-view')]//div[hasclass('payment-amount')]" position="replace">
-            <div class="payment-amount px-3 text-end">
-                <t t-if="line.isForeignCurrencyPayment and line.isForeignCurrencyPayment()">
-                    <div class="lh-sm">
-                        <t t-out="getPaymentLineForeignAmountDisplay(line)"/>
-                    </div>
-                    <div class="small text-muted lh-sm">
-                        <t t-out="getPaymentLineOrderAmountDisplay(line)"/>
-                    </div>
-                </t>
-                <t t-else="">
-                    <t t-out="getPaymentLineOrderAmountDisplay(line)"/>
+                    <t t-out="this.getPaymentLineOrderAmountDisplay(line)"/>
                 </t>
             </div>
         </xpath>
@@ -35,8 +20,8 @@
 
     <t t-inherit="point_of_sale.PaymentScreenStatus" t-inherit-mode="extension">
         <xpath expr="//div[hasclass('payment-status-container')]" position="before">
-            <div t-if="getPaymentStatusCurrencyLabel()" class="text-muted small pb-2">
-                Entering amount in <t t-out="getPaymentStatusCurrencyLabel()"/>
+            <div t-if="this.getPaymentStatusCurrencyLabel()" class="text-muted small pb-2">
+                Entering amount in <t t-out="this.getPaymentStatusCurrencyLabel()"/>
             </div>
         </xpath>
     </t>
@@ -46,9 +31,9 @@
             <attribute name="class" add="position-relative" separator=" "/>
         </xpath>
         <xpath expr="//div[hasclass('total')]" position="before">
-            <div t-if="getPaymentCurrencyRateLabels().length"
+            <div t-if="this.getPaymentCurrencyRateLabels().length"
                 class="o_currency_pos_payment_rates position-absolute top-0 end-0 m-2 text-start text-muted fs-6 lh-sm">
-                <div t-foreach="getPaymentCurrencyRateLabels()" t-as="rateLabel" t-key="rateLabel_index"
+                <div t-foreach="this.getPaymentCurrencyRateLabels()" t-as="rateLabel" t-key="rateLabel_index"
                     t-out="rateLabel"/>
             </div>
         </xpath>
@@ -57,10 +42,10 @@
              string is gone); reuse the same hasclass('total') anchor as the
              xpath above instead of an exact @class match. -->
         <xpath expr="//div[hasclass('total')]" position="inside">
-            <t t-if="shouldShowTotalDueConversion() and getConvertedTotalDue()">
+            <t t-if="this.shouldShowTotalDueConversion() and this.getConvertedTotalDue()">
                 <br/>
                 <span class="text-info fw-bold" style="font-size: 1.1em;">
-                    <t t-out="getConvertedTotalDue()"/>
+                    <t t-out="this.getConvertedTotalDue()"/>
                 </span>
             </t>
         </xpath>

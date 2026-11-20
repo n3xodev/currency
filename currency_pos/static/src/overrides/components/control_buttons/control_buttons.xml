@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates id="template" xml:space="preserve">
     <t t-inherit="point_of_sale.ControlButtons" t-inherit-mode="extension">
-        <xpath expr="//div[hasclass('control-buttons-modal')]/button[hasclass('o_pricelist_button')]" position="after">
-            <button class="btn btn-secondary btn-lg py-5" t-on-click="() => this.clickExchangeCurrency()">
-                <i class="oi me-2" data-icon="swap_horiz" role="img" aria-label="Exchange Currency" title="Seleccionar moneda"/>
-                <t t-if="exchangeCurrency" t-out="exchangeCurrency.name"/>
-                <t t-else="">Moneda</t>
-            </button>
+        <!-- Odoo 20 renders the pricelist button through the controlButton template
+             (`name="o_pricelist_button"`); add the exchange currency button after it. -->
+        <xpath expr="//t[@name='o_pricelist_button']" position="after">
+            <t t-call="point_of_sale.controlButton"
+                icon="'swap_horiz'"
+                btnText="this.exchangeCurrency ? this.exchangeCurrency.name : 'Moneda'"
+                btnClasses="'btn-secondary '"
+                onClick="() => this.clickExchangeCurrency()"/>
         </xpath>
     </t>
 </templates>

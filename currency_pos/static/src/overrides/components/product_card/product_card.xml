@@ -2,16 +2,16 @@
 <templates xml:space="preserve">
 
     <t t-inherit="point_of_sale.ProductCard" t-inherit-mode="extension">
-        <!-- Odoo 19 changed this node from a <div> to a <span>. -->
-        <xpath expr="//span[@t-if='props.comboExtraPrice']" position="before">
+        <!-- The combo extra price node is a <span> in Odoo 20 (props read through `this.`). -->
+        <xpath expr="//span[@t-if='this.props.comboExtraPrice']" position="before">
             <div class="product-price-footer text-center py-2 bg-light border-top">
                 <div class="mb-1">
                     <span class="fw-bold fs-3 text-primary">
-                        <t t-out="productPrice"/>
+                        <t t-out="this.productPrice"/>
                     </span>
                 </div>
-                <div t-if="productPricesInOtherCurrencies.length" class="small text-muted">
-                    <t t-foreach="productPricesInOtherCurrencies" t-as="currencyPrice" t-key="currencyPrice.currency.id">
+                <div t-if="this.productPricesInOtherCurrencies.length" class="small text-muted">
+                    <t t-foreach="this.productPricesInOtherCurrencies" t-as="currencyPrice" t-key="currencyPrice.currency.id">
                         <div>
                             <t t-out="currencyPrice.price"/>
                         </div>
