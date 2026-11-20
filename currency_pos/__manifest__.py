@@ -32,7 +32,6 @@
             "currency_pos/static/src/app/generic_components/currency_rates_widget/currency_rates_widget.js",
             "currency_pos/static/src/app/screens/product_screen/product_screen.js",
             "currency_pos/static/src/app/screens/product_screen/product_screen.xml",
-            "currency_pos/static/src/overrides/screens/product_screen/product_screen.js",
             "currency_pos/static/src/overrides/store/pos_store.js",
             "currency_pos/static/src/app/models/pos_order.js",
             "currency_pos/static/src/app/models/pos_payment.js",

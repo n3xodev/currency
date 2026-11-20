@@ -1,5 +1,6 @@
 import { ProductCard } from "@point_of_sale/app/components/product_card/product_card";
 import { patch } from "@web/core/utils/patch";
+import { usePos } from "@point_of_sale/app/hooks/pos_hook";
 
 // Odoo 19 removed PosStore.getProductPrice() entirely and, along with it,
 // dropped the base-price display from ProductCard's own template (the
@@ -10,6 +11,11 @@ import { patch } from "@web/core/utils/patch";
 // on the product record (product.template, delegated onto product.product);
 // the raw numeric equivalent (for currency conversion) is getTaxDetails().
 patch(ProductCard.prototype, {
+    setup() {
+        // ProductCard has no setup() of its own in Odoo 20 (nothing to call on super).
+        this.pos = usePos();
+    },
+
     get productPrice() {
         if (!this.props.product) {
             return "";
@@ -30,7 +36,7 @@ patch(ProductCard.prototype, {
 
         try {
             const prices = [];
-            const pos = this.env.services.pos;
+            const pos = this.pos;
             const posCurrency = pos.currency;
             const config = pos.config;
             const taxDetails = this.props.product.getTaxDetails();

@@ -8,7 +8,7 @@ patch(ProductConfiguratorPopup.prototype, {
     get unitPrice() {
         const product = this.state?.product || this.props.product;
         if (!product) {
-            return this.env.utils.formatCurrency(0);
+            return this.pos.formatCurrency(0);
         }
         return product.displayPriceUnit;
     },

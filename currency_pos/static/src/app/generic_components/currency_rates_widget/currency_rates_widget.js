@@ -1,10 +1,10 @@
-import { Component } from "@odoo/owl";
+import { Component, useProps } from "@odoo/owl";
 import { usePos } from "@point_of_sale/app/hooks/pos_hook";
 import { formatMajorExchangeRateLabel } from "@currency_pos/app/utils/payment_currency_utils";
 
 export class CurrencyRatesWidget extends Component {
     static template = "currency_pos.CurrencyRatesWidget";
-    static props = {};
+    props = useProps({});
 
     setup() {
         super.setup();

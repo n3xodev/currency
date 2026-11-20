@@ -3,7 +3,7 @@ import { patch } from "@web/core/utils/patch";
 
 patch(ProductInfoPopup.prototype, {
     getPricelistPriceLabel(pricelist) {
-        return this.env.utils.formatCurrency(pricelist.price || 0);
+        return this.pos.formatCurrency(pricelist.price || 0);
     },
 
     getPricelistSecondaryPrice(pricelist) {
