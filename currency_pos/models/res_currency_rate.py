@@ -6,22 +6,15 @@ class ResCurrencyRate(models.Model):
     _inherit = ["res.currency.rate", "pos.load.mixin"]
 
     @api.model
-    def _load_pos_data_domain(self, data, config):
-        # Odoo 19 passes `config` directly; no more need to re-browse the
-        # company from the already-loaded `data["pos.config"]` payload.
-        # `data[model]` is the plain list of already-loaded record dicts for
-        # that model (see pos_session.load_data(): `response[model] =
-        # self.env[model]._load_pos_data_search_read(...)`), not an Odoo 18
-        # `{"data": [...], "fields": [...]}` wrapper.
-        currencies_data = data.get("res.currency", [])
-        if not currencies_data:
+    def _load_pos_data_domain(self, data):
+        # Odoo 20 hands over the already loaded records of every model as
+        # recordsets (`data["res.currency"]`, `data["pos.config"]`).
+        currencies = data.get("res.currency")
+        if not currencies:
             return [("id", "=", False)]
 
-        currency_ids = [c["id"] for c in currencies_data]
-        company_currency_id = config.company_id.currency_id.id
-        if company_currency_id:
-            currency_ids = [cid for cid in currency_ids if cid != company_currency_id]
-
+        config = data["pos.config"]
+        currency_ids = (currencies - config.company_id.currency_id).ids
         today = fields.Date.today()
         return [
             ("currency_id", "in", currency_ids),

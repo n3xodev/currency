@@ -237,7 +237,6 @@ class PosPayment(models.Model):
         "amount",
         "payment_currency_amount",
         "payment_currency_id",
-        "currency_id",
         "payment_method_id",
         "pos_order_id",
     )
@@ -288,9 +287,3 @@ class PosPayment(models.Model):
                             "When payment currency matches order currency, both amounts must be equal."
                         )
                     )
-
-    def _create_payment_moves(self, is_reverse=False):
-        payments = self
-        for payment in self:
-            payment._oca_fill_multicurrency_values()
-        return super(PosPayment, payments)._create_payment_moves(is_reverse=is_reverse)

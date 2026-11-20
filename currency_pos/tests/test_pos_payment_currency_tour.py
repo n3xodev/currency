@@ -19,7 +19,6 @@ class TestPosPaymentCurrencyTour(AccountTestInvoicingHttpCommon):
             {
                 "name": "Tour POS MC",
                 "journal_id": cls.company_data["default_journal_sale"].id,
-                "invoice_journal_id": cls.company_data["default_journal_sale"].id,
                 "allow_multi_currency_payment": True,
                 # Odoo 19 made cash_control a computed field
                 # (`cash_control = bool(payment_method_ids.filtered(
@@ -45,6 +44,7 @@ class TestPosPaymentCurrencyTour(AccountTestInvoicingHttpCommon):
         cls.cash_payment_method = cls.env["pos.payment.method"].create(
             {
                 "name": "Cash",
+                "type": "cash",
                 "journal_id": cls.company_data["default_journal_cash"].id,
                 "receivable_account_id": cls.company_data["default_account_receivable"].id,
             }
@@ -70,6 +70,7 @@ class TestPosPaymentCurrencyTour(AccountTestInvoicingHttpCommon):
         cls.eur_payment_method = cls.env["pos.payment.method"].create(
             {
                 "name": "Bank EUR",
+                "type": "bank",
                 "journal_id": cls.eur_bank_journal.id,
                 "receivable_account_id": cls.company_data["default_account_receivable"].id,
             }
@@ -95,13 +96,16 @@ class TestPosPaymentCurrencyTour(AccountTestInvoicingHttpCommon):
                 "taxes_id": [(6, 0, [])],
             }
         )
-        cls.env["stock.quant"].with_context(inventory_mode=True).create(
-            {
-                "product_id": cls.tour_product.id,
-                "inventory_quantity": 100,
-                "location_id": cls.main_pos_config.picking_type_id.default_location_src_id.id,
-            }
-        ).action_apply_inventory()
+        # Odoo 20's point_of_sale no longer depends on stock: only stock the
+        # product when the warehouse is there.
+        if "stock.quant" in cls.env:
+            cls.env["stock.quant"].with_context(inventory_mode=True).create(
+                {
+                    "product_id": cls.tour_product.id,
+                    "inventory_quantity": 100,
+                    "location_id": cls.main_pos_config.picking_type_id.default_location_src_id.id,
+                }
+            ).action_apply_inventory()
 
         cls.pos_user = cls.env["res.users"].create(
             {

@@ -96,7 +96,7 @@ class TestPosProductCurrencyPrices(TransactionCase):
                         0,
                         {
                             "applied_on": "3_global",
-                            "compute_price": "formula",
+                            "compute_price": "discount",
                             "base": "list_price",
                         },
                     )
