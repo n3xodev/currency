@@ -1,4 +1,5 @@
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import ValidationError
 
 
 class PosPaymentMethod(models.Model):
@@ -43,6 +44,21 @@ class PosPaymentMethod(models.Model):
                 method.payment_currency_id = method.journal_id.currency_id
             else:
                 method.payment_currency_id = method.company_id.currency_id
+
+    @api.constrains("config_ids", "type", "journal_id")
+    def _check_cash_method_single_shop(self):
+        """Keep core's rule that a cash method belongs to one shop, but allow
+        several cash methods (one per currency) in the same shop."""
+        for method in self:
+            is_cash = method.type == "cash" or method.journal_id.type == "cash"
+            if is_cash and len(method.config_ids) > 1:
+                raise ValidationError(
+                    _(
+                        "You cannot assign the same Cash payment method to multiple "
+                        "POS Shops. Please create a separate Cash payment method for "
+                        "each shop."
+                    )
+                )
 
     @api.onchange("journal_id")
     def _onchange_journal_id_payment_method_lines(self):

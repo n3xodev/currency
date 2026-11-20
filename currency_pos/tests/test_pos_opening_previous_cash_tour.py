@@ -19,6 +19,7 @@ class TestPosOpeningPreviousCashTour(AccountTestInvoicingHttpCommon):
         cls.cash_payment_method = cls.env["pos.payment.method"].create(
             {
                 "name": "Cash",
+                "type": "cash",
                 "journal_id": cls.company_data["default_journal_cash"].id,
                 "receivable_account_id": cls.company_data["default_account_receivable"].id,
             }
@@ -59,6 +60,7 @@ class TestPosOpeningPreviousCashTour(AccountTestInvoicingHttpCommon):
         cls.eur_cash_payment_method = cls.env["pos.payment.method"].create(
             {
                 "name": "Cash EUR",
+                "type": "cash",
                 "journal_id": cls.eur_cash_journal.id,
                 "receivable_account_id": cls.company_data["default_account_receivable"].id,
             }
@@ -67,7 +69,6 @@ class TestPosOpeningPreviousCashTour(AccountTestInvoicingHttpCommon):
             {
                 "name": "Tour POS Opening Cash",
                 "journal_id": cls.company_data["default_journal_sale"].id,
-                "invoice_journal_id": cls.company_data["default_journal_sale"].id,
                 "allow_multi_currency_payment": True,
                 "payment_method_ids": [
                     (4, cls.cash_payment_method.id),
@@ -122,22 +123,19 @@ class TestPosOpeningPreviousCashTour(AccountTestInvoicingHttpCommon):
             },
             False,
         )
-        first_session.post_closing_cash_details(
-            5.0,
-            counted_cash_by_method={
+        first_session.close_session_from_ui(
+            {
                 self.cash_payment_method.id: 5.0,
                 self.eur_cash_payment_method.id: 20.0,
-            },
+            }
         )
-        first_session.close_session_from_ui()
         self.assertEqual(first_session.state, "closed")
 
         self.main_pos_config.with_user(self.pos_user).open_ui()
         second_session = self.main_pos_config.current_session_id
-        # Odoo 19 removed the `_load_pos_data(self, data)` entry point in favor
-        # of `_load_pos_data_search_read`, which returns the record list
-        # directly (no more `{"data": [...], "fields": [...]}` wrapper).
-        loaded = second_session._load_pos_data_search_read({}, second_session.config_id)
+        loaded = self.env["pos.session"]._load_pos_data_read(
+            second_session, second_session.config_id
+        )
         self.assertAlmostEqual(
             loaded[0]["_oca_cash_box_openings"][self.cash_payment_method.id],
             5.0,

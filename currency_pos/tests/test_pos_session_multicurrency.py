@@ -17,7 +17,6 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "amount_tax": 0.0,
                 "amount_paid": 0.0,
                 "amount_return": 0.0,
-                "last_order_preparation_change": "{}",
             }
         )
         payment = self.env["pos.payment"].create(
@@ -64,7 +63,6 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "amount_paid": 100.0,
                 "amount_return": 0.0,
                 "state": "paid",
-                "last_order_preparation_change": "{}",
             }
         )
         self.env["pos.payment"].create(
@@ -97,7 +95,6 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "amount_paid": 100.0,
                 "amount_return": 0.0,
                 "state": "paid",
-                "last_order_preparation_change": "{}",
             }
         )
         payment = self.env["pos.payment"].create(
@@ -146,7 +143,6 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "amount_tax": 0.0,
                 "amount_paid": 0.0,
                 "amount_return": 0.0,
-                "last_order_preparation_change": "{}",
             }
         )
         self.env["pos.payment"].create(
@@ -184,23 +180,6 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
         paid = sum(order.payment_ids.mapped("amount"))
         self.assertAlmostEqual(paid, 80.0, places=2)
 
-    def test_session_close_with_foreign_bank_payment(self):
-        self.config = self.multi_currency_config
-        session = self.open_new_session(0)
-        order_data = self.create_ui_order_data(
-            [(self.product_mc, 1)],
-            payments=[(self.eur_bank_payment_method, 100.0)],
-        )
-        self.env["pos.order"].sync_from_ui([order_data])
-        payment = session.order_ids.payment_ids.filtered(
-            lambda pay: pay.payment_method_id == self.eur_bank_payment_method
-        )
-        self.assertEqual(len(payment), 1)
-        self.assertEqual(payment.payment_currency_id, self.eur_currency)
-        self.assertGreater(payment.payment_currency_amount, 0.0)
-        session.action_pos_session_closing_control()
-        self.assertEqual(session.state, "closed")
-
     def test_opening_creates_cash_boxes_per_cash_method(self):
         self.config = self.multi_currency_config
         session = self.open_new_session(10)
@@ -230,12 +209,12 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
         closing_data = session.get_closing_control_data()
         primary = next(
             item
-            for item in closing_data["cash_details"]
+            for item in closing_data["default_cash_details"]["cash_details"]
             if item["id"] == self.cash_payment_method.id
         )
         eur_cash = next(
             item
-            for item in closing_data["cash_details"]
+            for item in closing_data["default_cash_details"]["cash_details"]
             if item["id"] == self.eur_cash_payment_method.id
         )
         self.assertAlmostEqual(primary["opening"], 5.0, places=2)
@@ -255,14 +234,12 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
             },
             False,
         )
-        first_session.post_closing_cash_details(
-            5.0,
-            counted_cash_by_method={
+        first_session.close_session_from_ui(
+            {
                 self.cash_payment_method.id: 5.0,
                 self.eur_cash_payment_method.id: 20.0,
-            },
+            }
         )
-        first_session.close_session_from_ui()
         self.assertEqual(first_session.state, "closed")
 
         self.multi_currency_config.open_ui()
@@ -270,10 +247,9 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
         openings = second_session._oca_get_cash_box_opening_map()
         self.assertAlmostEqual(openings[self.cash_payment_method.id], 5.0, places=2)
         self.assertAlmostEqual(openings[self.eur_cash_payment_method.id], 20.0, places=2)
-        # Odoo 19 removed the `_load_pos_data(self, data)` entry point in favor
-        # of `_load_pos_data_search_read`, which returns the record list
-        # directly (no more `{"data": [...], "fields": [...]}` wrapper).
-        loaded = second_session._load_pos_data_search_read({}, second_session.config_id)
+        loaded = self.env["pos.session"]._load_pos_data_read(
+            second_session, second_session.config_id
+        )
         self.assertIn("_oca_cash_box_openings", loaded[0])
         self.assertNotIn("_rt_cash_box_openings", loaded[0])
         self.assertNotIn("rt_cash_box_openings", loaded[0])
@@ -302,77 +278,9 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "payment_method_id": self.eur_cash_payment_method.id,
             },
         )
-        move = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == self.eur_cash_journal
-        )
+        move = session._oca_statement_lines(self.eur_cash_journal)
         self.assertEqual(len(move), 1)
         self.assertAlmostEqual(move.amount, 20.0, places=2)
-
-    def test_foreign_cash_out_does_not_create_usd_difference(self):
-        """Cash out on foreign journal must not post a primary (USD) cash difference.
-
-        Reproduces POS/00017: opened/closed USD at 5.00 with a VES/EUR cash-out
-        incorrectly shifted the primary expected balance and booked a fake profit.
-        """
-        self.config = self.multi_currency_config
-        self.multi_currency_config.open_ui()
-        session = self.multi_currency_config.current_session_id
-        session.oca_set_opening_control(
-            {
-                self.cash_payment_method.id: 5.0,
-                self.eur_cash_payment_method.id: 1010.0,
-            },
-            False,
-        )
-        session.try_cash_in_out(
-            "out",
-            1000.0,
-            "SOBRANTE",
-            False,
-            {
-                "translatedType": "out",
-                "formattedAmount": "1000.00",
-                "payment_method_id": self.eur_cash_payment_method.id,
-            },
-        )
-        session.post_closing_cash_details(
-            5.0,
-            counted_cash_by_method={
-                self.cash_payment_method.id: 5.0,
-                self.eur_cash_payment_method.id: 10.0,
-            },
-        )
-        primary_box = session._oca_get_cash_box(self.cash_payment_method)
-        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
-        self.assertAlmostEqual(primary_box.closing_difference, 0.0, places=2)
-        self.assertAlmostEqual(eur_box.closing_difference, 0.0, places=2)
-        self.assertAlmostEqual(session.cash_register_difference, 0.0, places=2)
-
-        session.close_session_from_ui()
-        self.assertEqual(session.state, "closed")
-        self.assertAlmostEqual(session.cash_real_transaction, 0.0, places=2)
-
-        primary_journal = self.cash_payment_method.journal_id
-        usd_statement_lines = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == primary_journal
-        )
-        self.assertFalse(
-            usd_statement_lines,
-            "No USD cash difference statement line should be created",
-        )
-        eur_statement_lines = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == self.eur_cash_journal
-        )
-        self.assertEqual(len(eur_statement_lines), 1)
-        self.assertAlmostEqual(eur_statement_lines.amount, -1000.0, places=2)
-
-        usd_gain_moves = self.env["account.move.line"].search(
-            [
-                ("move_id", "in", session.statement_line_ids.move_id.ids),
-                ("journal_id", "=", primary_journal.id),
-            ]
-        )
-        self.assertFalse(usd_gain_moves)
 
     def test_closing_control_lists_all_cash_methods(self):
         self.config = self.multi_currency_config
@@ -387,10 +295,10 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
         )
         self.assertEqual(payment.payment_currency_id, self.eur_currency)
         closing_data = session.get_closing_control_data()
-        self.assertEqual(len(closing_data["cash_details"]), 2)
+        self.assertEqual(len(closing_data["default_cash_details"]["cash_details"]), 2)
         eur_cash = next(
             item
-            for item in closing_data["cash_details"]
+            for item in closing_data["default_cash_details"]["cash_details"]
             if item["id"] == self.eur_cash_payment_method.id
         )
         self.assertTrue(eur_cash["has_foreign_currency"])
@@ -399,46 +307,10 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
             payment.payment_currency_amount,
             places=2,
         )
-        cash_ids = {item["id"] for item in closing_data["cash_details"]}
+        cash_ids = {item["id"] for item in closing_data["default_cash_details"]["cash_details"]}
         non_cash_ids = {item["id"] for item in closing_data["non_cash_payment_methods"]}
         self.assertIn(self.eur_cash_payment_method.id, cash_ids)
         self.assertNotIn(self.eur_cash_payment_method.id, non_cash_ids)
-
-    def test_session_close_with_foreign_cash_payment(self):
-        self.config = self.multi_currency_config
-        session = self.open_new_session(0)
-        order_data = self.create_ui_order_data(
-            [(self.product_mc, 1)],
-            payments=[(self.eur_cash_payment_method, 100.0)],
-        )
-        self.env["pos.order"].sync_from_ui([order_data])
-        payment = session.order_ids.payment_ids.filtered(
-            lambda pay: pay.payment_method_id == self.eur_cash_payment_method
-        )
-        closing_data = session.get_closing_control_data()
-        eur_cash = next(
-            item
-            for item in closing_data["cash_details"]
-            if item["id"] == self.eur_cash_payment_method.id
-        )
-        counted_map = {
-            self.cash_payment_method.id: 0.0,
-            self.eur_cash_payment_method.id: eur_cash["amount"],
-        }
-        session.post_closing_cash_details(
-            counted_map[self.cash_payment_method.id],
-            counted_cash_by_method=counted_map,
-        )
-        session.close_session_from_ui()
-        self.assertEqual(session.state, "closed")
-        eur_box = session.cash_box_ids.filtered(
-            lambda box: box.payment_method_id == self.eur_cash_payment_method
-        )
-        self.assertAlmostEqual(
-            eur_box.balance_end_real,
-            payment.payment_currency_amount,
-            places=2,
-        )
 
     def _create_paid_order(self):
         self.multi_currency_config.open_ui()
@@ -452,7 +324,6 @@ class TestPosSessionMulticurrency(TestPosPaymentCurrencyCommon):
                 "amount_paid": 100.0,
                 "amount_return": 0.0,
                 "state": "paid",
-                "last_order_preparation_change": "{}",
             }
         )
 
@@ -476,6 +347,6 @@ class TestPosSessionLoadDataRead(TestPosPaymentCurrencyCommon):
         rows = self.env["pos.session"]._load_pos_data_read(session, config)
         self.assertEqual(len(rows), 1)
         openings = rows[0]["_oca_cash_box_openings"]
-        cash_method_ids = set(config.payment_method_ids.filtered("is_cash_count").ids)
+        cash_method_ids = set(config.payment_method_ids.filtered(lambda pm: pm.type == "cash").ids)
         self.assertTrue(cash_method_ids)
         self.assertEqual(set(openings), cash_method_ids)

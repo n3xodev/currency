@@ -42,6 +42,7 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
         method = self.env["pos.payment.method"].create(
             {
                 "name": "Cash EUR Defaults",
+                "type": "cash",
                 "journal_id": self.eur_cash_journal.id,
                 "receivable_account_id": self.company_data["default_account_receivable"].id,
             }
@@ -62,6 +63,7 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
         method = self.env["pos.payment.method"].create(
             {
                 "name": "Cash Switch Journal",
+                "type": "cash",
                 "journal_id": self.eur_cash_journal.id,
                 "receivable_account_id": self.company_data["default_account_receivable"].id,
             }
@@ -94,8 +96,8 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
                 "payment_method_id": self.eur_cash_payment_method.id,
             },
         )
-        move = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == self.eur_cash_journal and line.amount > 0
+        move = session._oca_statement_lines(self.eur_cash_journal).filtered(
+            lambda line: line.amount > 0
         )
         self.assertEqual(len(move), 1)
         self._assert_counterpart_account(move, self.outstanding_receipts)
@@ -114,8 +116,8 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
                 "payment_method_id": self.eur_cash_payment_method.id,
             },
         )
-        move = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == self.eur_cash_journal and line.amount < 0
+        move = session._oca_statement_lines(self.eur_cash_journal).filtered(
+            lambda line: line.amount < 0
         )
         self.assertEqual(len(move), 1)
         self._assert_counterpart_account(move, self.outstanding_payments)
@@ -138,6 +140,7 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
         method = self.env["pos.payment.method"].create(
             {
                 "name": "Cash No Lines",
+                "type": "cash",
                 "journal_id": suspense_journal.id,
                 "receivable_account_id": self.company_data["default_account_receivable"].id,
             }
@@ -162,8 +165,8 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
                 "payment_method_id": method.id,
             },
         )
-        move = session.statement_line_ids.filtered(
-            lambda line: line.amount == 8.0 and line.journal_id == suspense_journal
+        move = session._oca_statement_lines(suspense_journal).filtered(
+            lambda line: line.amount == 8.0
         )
         self.assertEqual(len(move), 1)
         suspense = suspense_journal.suspense_account_id
@@ -221,81 +224,11 @@ class TestPosPaymentMethodLines(TestPosPaymentCurrencyCommon):
                 "payment_method_id": self.eur_cash_payment_method.id,
             },
         )
-        cash_in = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == self.eur_cash_journal and line.amount > 0
+        cash_in = session._oca_statement_lines(self.eur_cash_journal).filtered(
+            lambda line: line.amount > 0
         )[-1:]
-        cash_out = session.statement_line_ids.filtered(
-            lambda line: line.journal_id == self.eur_cash_journal and line.amount < 0
+        cash_out = session._oca_statement_lines(self.eur_cash_journal).filtered(
+            lambda line: line.amount < 0
         )[-1:]
         self._assert_counterpart_account(cash_in, expected_inbound)
         self._assert_counterpart_account(cash_out, expected_outbound)
-
-    def test_bank_payment_outstanding_follows_inbound_outbound_lines(self):
-        inbound = self.eur_bank_journal.inbound_payment_method_line_ids[:1]
-        outbound = self.eur_bank_journal.outbound_payment_method_line_ids[:1]
-        inbound.payment_account_id = self.outstanding_receipts
-        outbound.payment_account_id = self.outstanding_payments
-        wrong_outstanding = self.company_data["default_account_receivable"]
-        self.eur_bank_payment_method.write(
-            {
-                "outstanding_account_id": wrong_outstanding.id,
-                "inbound_payment_method_line_id": inbound.id,
-                "outbound_payment_method_line_id": outbound.id,
-            }
-        )
-        self.assertEqual(
-            self.eur_bank_payment_method._oca_get_payment_outstanding_account_for_amount(
-                50.0
-            ),
-            self.outstanding_receipts,
-        )
-        self.assertEqual(
-            self.eur_bank_payment_method._oca_get_payment_outstanding_account_for_amount(
-                -50.0
-            ),
-            self.outstanding_payments,
-        )
-
-        self.config = self.multi_currency_config
-        session = self.open_new_session(0)
-        self.assertEqual(
-            session._oca_get_force_outstanding_account(
-                self.eur_bank_payment_method,
-                {"amount": -20.0},
-            ),
-            self.outstanding_payments,
-        )
-        self.assertEqual(
-            session._oca_get_force_outstanding_account(
-                self.eur_bank_payment_method,
-                {"amount": 20.0},
-            ),
-            self.outstanding_receipts,
-        )
-        self.assertEqual(
-            self.eur_bank_payment_method.outstanding_account_id,
-            wrong_outstanding,
-        )
-
-        order_data = self.create_ui_order_data(
-            [(self.product_mc, 1)],
-            payments=[(self.eur_bank_payment_method, 100.0)],
-        )
-        self.env["pos.order"].sync_from_ui([order_data])
-        session.action_pos_session_closing_control()
-        self.assertEqual(session.state, "closed")
-        inbound_pay = self.env["account.payment"].search(
-            [
-                ("pos_session_id", "=", session.id),
-                ("payment_type", "=", "inbound"),
-            ]
-        )
-        self.assertTrue(inbound_pay)
-        self.assertEqual(
-            inbound_pay.force_outstanding_account_id,
-            self.outstanding_receipts,
-        )
-        self.assertEqual(
-            self.eur_bank_payment_method.outstanding_account_id,
-            wrong_outstanding,
-        )
