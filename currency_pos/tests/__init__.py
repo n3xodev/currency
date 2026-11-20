@@ -6,5 +6,6 @@ from . import test_pos_cash_boxes
 from . import test_pos_session_closing
 from . import test_pos_closing_accounts
 from . import test_pos_closing_company_currency
+from . import test_pos_closing_popup
 from . import test_pos_payment_method_lines
 from . import test_pos_product_currency_prices
