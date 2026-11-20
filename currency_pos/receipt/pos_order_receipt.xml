@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <!-- Rendered on the server and, from the POS, by the printer plugin. -->
+    <template id="pos_order_receipt" inherit_id="point_of_sale.pos_order_receipt">
+        <!-- The amount cell is a `t-out`, so the order amount goes in its own row. -->
+        <xpath expr="//tr[hasclass('payment-line')]" position="after">
+            <tr class="payment-line-order-currency" t-if="payment.get('amount_order_currency')">
+                <td class="text-start w-70" />
+                <td class="text-end w-30 font-monospace">(<t t-out="payment['amount_order_currency']" />)</td>
+            </tr>
+        </xpath>
+    </template>
+</odoo>

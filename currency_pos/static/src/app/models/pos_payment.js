@@ -144,8 +144,8 @@ patch(PosPayment.prototype, {
     // Odoo 19 removed `serialize()`/`export_for_printing()` from PosPayment
     // entirely (no override point left to patch: syncing to the backend is
     // now fully generic/field-schema-driven, and the receipt reads live
-    // records directly - see order_receipt.js's
-    // formatReceiptPaymentForeignAmount). `payment_currency_id`,
+    // records directly; this module's receipt data is built in
+    // utils/printer/generate_printer_data.js). `payment_currency_id`,
     // `payment_currency_amount` and `payment_currency_rate` are already
     // registered as `extraFields` above, so the generic sync already
     // includes them without a custom serialize() override.
