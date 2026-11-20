@@ -1,5 +1,6 @@
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
+from odoo.tools import float_is_zero
 
 
 class PosSession(models.Model):
@@ -320,6 +321,180 @@ class PosSession(models.Model):
         if "oca_payment_method_closing" in self.env.context:
             self._oca_record_cash_box_counts()
         return super()._validate_session_accounting()
+
+    def _handle_cash_statement_entries(self, payment_method_closing={}):
+        """Also book the closing difference of the cash boxes without bank statement.
+
+        Core calls this method when the session opens (it then creates the
+        session bank statement) and when it closes; only the closing counts.
+        """
+        is_opening = not self.bank_statement_id
+        result = super()._handle_cash_statement_entries(payment_method_closing)
+        if not is_opening:
+            self._oca_post_secondary_cash_box_differences()
+        return result
+
+    def _oca_post_secondary_cash_box_differences(self):
+        self.ensure_one()
+        primary = self._oca_primary_cash_payment_method()
+        for cash_box in self.cash_box_ids:
+            if cash_box.payment_method_id == primary:
+                continue  # core books the primary box difference
+            self._oca_post_cash_box_difference(
+                cash_box.payment_method_id,
+                cash_box.closing_difference,
+            )
+
+    def _oca_post_cash_box_difference(self, payment_method, amount):
+        """Cash difference of a cash box, in the currency of its journal."""
+        self.ensure_one()
+        journal = payment_method.journal_id
+        currency = self._oca_payment_method_currency(payment_method)
+        if not journal or float_is_zero(amount, precision_rounding=currency.rounding):
+            return
+        if amount < 0.0:
+            counterpart_account = journal.loss_account_id
+            label = _("Cash difference observed during the counting (Loss) - closing")
+            account_type = _("Loss")
+        else:
+            counterpart_account = journal.profit_account_id
+            label = _("Cash difference observed during the counting (Profit) - closing")
+            account_type = _("Profit")
+        if not counterpart_account:
+            raise UserError(
+                _(
+                    "Please go on the %(journal)s journal and define a %(type)s Account. "
+                    "This account will be used to record cash difference.",
+                    journal=journal.name,
+                    type=account_type,
+                )
+            )
+        statement_line = (
+            self.env["account.bank.statement.line"]
+            .with_context(no_retrieve_partner=True)
+            .sudo()
+            .create(
+                {
+                    "journal_id": journal.id,
+                    "company_id": self.company_id.id,
+                    "amount": amount,
+                    "date": fields.Date.context_today(self),
+                    "pos_session_id": self.id,
+                    "payment_ref": label,
+                    "counterpart_account_id": counterpart_account.id,
+                }
+            )
+        )
+        statement_line.move_id.message_post(
+            body=_("Related Session: %(link)s", link=self._get_html_link())
+        )
+
+    def _handle_bank_payment_method_difference(self, payment_method_closing={}):
+        """Read the counted amount of a foreign bank method in its own currency.
+
+        Core compares the order currency total of the payments with the counted
+        amount; the closing popup counts a foreign bank method in the currency
+        of the method, so convert its difference to the order currency.
+
+        Core also books that difference with lines in the company currency
+        (`pos_session.py` `_handle_bank_payment_method_difference`: no `currency_id`,
+        `amount_currency` = the order currency difference), which is only right when
+        the order currency is the company currency. When it is not (e.g. a company in
+        VES selling in USD) the difference is booked here instead.
+        """
+        closing = dict(payment_method_closing or {})
+        book_here = self.currency_id != self.company_id.currency_id
+        for payment_method in self.payment_method_ids.filtered(lambda pm: pm.type == "bank"):
+            is_foreign = self._oca_is_foreign_payment_method(payment_method)
+            if not (is_foreign or book_here):
+                continue
+            key = next(
+                (k for k in (str(payment_method.id), payment_method.id) if k in closing),
+                None,
+            )
+            if key is None:
+                continue
+            payments = self.order_ids.payment_ids.filtered(
+                lambda payment, pm=payment_method: payment.payment_method_id == pm
+            )
+            order_amount = sum(payments.mapped("amount"))
+            counted = closing[key] or 0.0
+            if is_foreign:
+                expected, currency = self._oca_amount_in_payment_method_currency(
+                    payments, payment_method
+                )
+                difference = currency.round(expected - counted)
+                counted = order_amount
+                if not currency.is_zero(difference):
+                    counted -= currency._convert(
+                        difference,
+                        self.currency_id,
+                        self.company_id,
+                        fields.Date.context_today(self),
+                    )
+            if book_here:
+                # Core then sees no difference for this method.
+                self._oca_book_bank_difference(payment_method, order_amount - counted)
+                counted = order_amount
+            closing[key] = counted
+        return super()._handle_bank_payment_method_difference(closing)
+
+    def _oca_book_bank_difference(self, payment_method, difference):
+        """Book a bank method difference (order currency, positive = loss) with the
+        lines in the order currency and the balance in the company currency."""
+        self.ensure_one()
+        order_currency = self.currency_id
+        if order_currency.is_zero(difference):
+            return
+        journal = payment_method.journal_id
+        correction_account = journal.loss_account_id if difference > 0 else journal.profit_account_id
+        if not journal or not correction_account:
+            return
+        pm_account = payment_method.receivable_account_id or self._get_receivable_account()
+        today = fields.Date.context_today(self)
+        amount = order_currency.round(abs(difference))
+        balance = self.company_id.currency_id.round(
+            order_currency._convert(amount, self.company_id.currency_id, self.company_id, today)
+        )
+        sign = 1 if difference < 0 else -1
+        move = (
+            self.env["account.move"]
+            .sudo()
+            .with_context(linked_to_pos=True)
+            .create(
+                {
+                    "journal_id": journal.id,
+                    "date": today,
+                    "ref": _(
+                        "Bank difference for %(pm)s in %(session)s",
+                        pm=payment_method.name,
+                        session=self.name,
+                    ),
+                    "line_ids": [
+                        Command.create(
+                            {
+                                "name": payment_method.name,
+                                "account_id": pm_account.id,
+                                "currency_id": order_currency.id,
+                                "amount_currency": sign * amount,
+                                "balance": sign * balance,
+                            }
+                        ),
+                        Command.create(
+                            {
+                                "name": payment_method.name,
+                                "account_id": correction_account.id,
+                                "currency_id": order_currency.id,
+                                "amount_currency": -sign * amount,
+                                "balance": -sign * balance,
+                            }
+                        ),
+                    ],
+                }
+            )
+        )
+        move._post()
+        self.correction_move_ids |= move
 
     def try_cash_in_out(self, _type, amount, reason, partner_id, extras=None, **kwargs):
         """Cash in/out on a given cash box.
