@@ -1,4 +1,5 @@
 from odoo.tests import tagged
+from odoo.exceptions import UserError
 
 from .common import TestPosPaymentCurrencyCommon
 
@@ -324,3 +325,142 @@ class TestPosSessionClosing(TestPosPaymentCurrencyCommon):
         self.assertEqual(len(outbound_pay), 1)
         self.assertEqual(outbound_pay.force_outstanding_account_id, self.outstanding_payments)
         self.assertEqual(outbound_pay.currency_id, self.eur_currency)
+
+
+@tagged("post_install", "-at_install", "currency_pos")
+class TestPosSessionClosingCounts(TestPosPaymentCurrencyCommon):
+    """Counted cash arrives through `close_session_from_ui` (forward-port of 19 RPC tests)."""
+
+    def _open_session(self):
+        self.config = self.multi_currency_config
+        session = self.open_new_session(5.0)
+        session._oca_get_cash_box(self.eur_cash_payment_method).balance_start = 20.0
+        return session
+
+    def _draft_order(self, session):
+        return self.env["pos.order"].create(
+            {
+                "session_id": session.id,
+                "partner_id": self.partner1.id,
+                "amount_total": 10.0,
+                "amount_tax": 0.0,
+                "amount_paid": 0.0,
+                "amount_return": 0.0,
+                "state": "draft",
+            }
+        )
+
+    def test_counts_arrive_as_json_string_keys(self):
+        session = self._open_session()
+        result = session.close_session_from_ui(
+            {
+                str(self.cash_payment_method.id): 5.0,
+                str(self.eur_cash_payment_method.id): 18.0,
+            }
+        )
+        self.assertTrue(result["status"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
+        self.assertAlmostEqual(eur_box.closing_difference, -2.0, places=2)
+
+    def test_missing_secondary_count_keeps_the_expected_balance(self):
+        session = self._open_session()
+        session.close_session_from_ui({self.cash_payment_method.id: 5.0})
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 20.0, places=2)
+        self.assertAlmostEqual(eur_box.closing_difference, 0.0, places=2)
+
+    def test_unknown_payment_method_is_ignored(self):
+        session = self._open_session()
+        result = session.close_session_from_ui(
+            {
+                999999: 7.0,
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 18.0,
+            }
+        )
+        self.assertTrue(result["status"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 18.0, places=2)
+
+    def test_draft_orders_refuse_the_closing_and_store_nothing(self):
+        session = self._open_session()
+        self._draft_order(session)
+        result = session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 18.0,
+            }
+        )
+        self.assertFalse(result["status"])
+        self.assertEqual(result["type"], "draft_orders")
+        self.assertNotEqual(session.state, "closed")
+        for box in session.cash_box_ids:
+            self.assertEqual(box.balance_end_real, 0.0)
+
+    def test_closed_session_is_refused_and_keeps_its_counts(self):
+        session = self._open_session()
+        session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 20.0,
+            }
+        )
+        self.assertEqual(session.state, "closed")
+        result = session.close_session_from_ui({self.eur_cash_payment_method.id: 1.0})
+        self.assertFalse(result["status"])
+        self.assertEqual(result["type"], "session_already_closed")
+        self.assertTrue(result["redirect"])
+        eur_box = session._oca_get_cash_box(self.eur_cash_payment_method)
+        self.assertAlmostEqual(eur_box.balance_end_real, 20.0, places=2)
+
+    def test_closed_session_with_draft_order_gets_the_closed_alert(self):
+        # Core reports draft orders first, which the popup cannot get out of.
+        session = self._open_session()
+        session.close_session_from_ui(
+            {
+                self.cash_payment_method.id: 5.0,
+                self.eur_cash_payment_method.id: 20.0,
+            }
+        )
+        self._draft_order(session)
+        result = session.close_session_from_ui({self.eur_cash_payment_method.id: 1.0})
+        self.assertFalse(result["status"])
+        self.assertEqual(result["type"], "session_already_closed")
+        self.assertTrue(result["redirect"])
+
+    def _assert_counts_refused(self, session, counts):
+        with self.assertRaises(UserError):
+            session.close_session_from_ui(counts)
+        self.assertNotEqual(session.state, "closed")
+        for box in session.cash_box_ids:
+            self.assertEqual(box.balance_end_real, 0.0)
+
+    def test_malformed_key_is_refused(self):
+        session = self._open_session()
+        self._assert_counts_refused(session, {"abc": 1.0, self.eur_cash_payment_method.id: 18.0})
+
+    def test_non_numeric_value_is_refused(self):
+        session = self._open_session()
+        self._assert_counts_refused(
+            session, {self.cash_payment_method.id: "x", self.eur_cash_payment_method.id: 18.0}
+        )
+
+    def test_non_finite_value_is_refused(self):
+        session = self._open_session()
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            self._assert_counts_refused(
+                session, {self.cash_payment_method.id: bad, self.eur_cash_payment_method.id: 18.0}
+            )
+
+    def test_counts_that_are_not_a_mapping_are_refused(self):
+        session = self._open_session()
+        for bad in ([[self.eur_cash_payment_method.id, 18.0]], "x", 5, None):
+            self._assert_counts_refused(session, bad)
+
+    def test_huge_integer_count_is_refused(self):
+        # math.isfinite() overflows on integers beyond the float range.
+        session = self._open_session()
+        self._assert_counts_refused(
+            session, {self.cash_payment_method.id: 10**400, self.eur_cash_payment_method.id: 18.0}
+        )
