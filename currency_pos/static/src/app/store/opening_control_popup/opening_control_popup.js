@@ -3,30 +3,44 @@ import { patch } from "@web/core/utils/patch";
 import { formatFloat } from "@web/core/utils/numbers";
 import { MoneyDetailsPopup } from "@point_of_sale/app/components/popups/money_details_popup/money_details_popup";
 import { _t } from "@web/core/l10n/translation";
-import { RPCError } from "@web/core/network/rpc";
+import { ConnectionLostError } from "@web/core/network/rpc";
+import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { buildOpeningCashByMethod } from "@currency_pos/app/utils/opening_cash_utils";
 import { getPaymentMethodCurrency } from "@currency_pos/app/utils/payment_currency_utils";
 
 patch(OpeningControlPopup.prototype, {
     setup() {
-        super.setup();
+        super.setup(...arguments);
         this.moneyDetailsByMethod = {};
         const openings = this.pos.session._oca_cash_box_openings || {};
         this.state.openingCashByMethod = buildOpeningCashByMethod({
             cashPaymentMethods: this.getCashPaymentMethods(),
             openings,
             primaryPaymentMethod: this.getPrimaryCashPaymentMethod(),
-            cashRegisterBalanceStart: this.pos.session.cash_register_balance_start || 0,
+            cashRegisterBalanceStart: this.pos.config._last_opening_balance || 0,
             getCurrency: (paymentMethod) => this._getCashMethodCurrency(paymentMethod),
             companyCurrency: this.pos.currency,
-            formatCurrency: (amount, withSymbol) =>
-                this.env.utils.formatCurrency(amount, withSymbol),
+            formatCurrency: (amount, withSymbol) => this._formatOpeningAmount(amount, withSymbol),
             formatFloat,
         });
     },
 
     getCashPaymentMethods() {
-        return this.pos.config.payment_method_ids.filter((pm) => pm.is_cash_count || pm.type === "cash");
+        return this.pos.config.payment_method_ids.filter((pm) => pm.type === "cash");
+    },
+
+    _formatOpeningAmount(amount, withSymbol = true) {
+        return this.pos.formatCurrency(amount, this.pos.config.currency_id.id, {
+            noSymbol: !withSymbol,
+        });
+    },
+
+    _parseOpeningAmount(raw) {
+        try {
+            return this.pos.parseCurrency(raw);
+        } catch {
+            return NaN;
+        }
     },
 
     getPrimaryCashPaymentMethod() {
@@ -50,28 +64,31 @@ patch(OpeningControlPopup.prototype, {
         const cashboxValues = {};
         for (const paymentMethod of this.getCashPaymentMethods()) {
             const raw = this.state.openingCashByMethod[paymentMethod.id];
-            if (!this.env.utils.isValidFloat(raw)) {
+            const amount = this.pos.isValidFloat(raw) ? this._parseOpeningAmount(raw) : NaN;
+            if (Number.isNaN(amount)) {
                 return;
             }
-            cashboxValues[paymentMethod.id] = this.env.utils.parseValidFloat(raw);
+            cashboxValues[paymentMethod.id] = amount;
         }
+        // queue only when known offline, so the reconnect loop is sure to replay it
+        const queue = this.pos.data.network.offline;
         try {
-            await this.pos.data.call(
+            await this.pos.data.callRelated(
                 "pos.session",
                 "oca_set_opening_control",
                 [this.pos.session.id, cashboxValues, this.state.notes],
                 {},
-                true
+                queue
             );
         } catch (error) {
-            if (
-                error instanceof RPCError &&
-                error.data.name === "odoo.exceptions.MissingError" &&
-                (await this.pos.isSessionDeleted())
-            ) {
-                return window.location.reload();
+            if (error instanceof ConnectionLostError) {
+                this.dialog.add(AlertDialog, {
+                    title: _t("Connection Lost"),
+                    body: _t("The register cannot be opened while offline. Please try again."),
+                });
+                return;
             }
-            throw error;
+            return this.pos.reloadIfSessionDeleted(error);
         }
         this.pos.session.state = "opened";
         this.props.close();
@@ -83,9 +100,6 @@ patch(OpeningControlPopup.prototype, {
             return;
         }
         const action = _t("Cash control - opening");
-        // Odoo 19's OpeningControlPopup no longer injects hardwareProxy
-        // directly (unlike ClosePosPopup); use pos.openCashbox(), which
-        // delegates to the hardware proxy service internally.
         await this.pos.openCashbox(action);
         const currency = this._getCashMethodCurrency(method);
         this.dialog.add(MoneyDetailsPopup, {
@@ -99,7 +113,7 @@ patch(OpeningControlPopup.prototype, {
                         ? formatFloat(total, {
                               digits: [true, currency.decimal_places ?? 2],
                           })
-                        : this.env.utils.formatCurrency(total, false);
+                        : this._formatOpeningAmount(total, false);
                     if (method === this.getPrimaryCashPaymentMethod()) {
                         this.state.openingCash = this.state.openingCashByMethod[method.id];
                     }
@@ -113,8 +127,13 @@ patch(OpeningControlPopup.prototype, {
         });
     },
 
+    getCurrencyPosition(paymentMethod) {
+        const currency = this._getCashMethodCurrency(paymentMethod);
+        return currency && currency.id !== this.pos.currency.id ? "after" : this.pos.currency.position;
+    },
+
     handleMethodInputChange(paymentMethod) {
-        if (!this.env.utils.isValidFloat(this.state.openingCashByMethod[paymentMethod.id])) {
+        if (!this.pos.isValidFloat(this.state.openingCashByMethod[paymentMethod.id])) {
             return;
         }
         this.state.notes = "";
@@ -125,7 +144,7 @@ patch(OpeningControlPopup.prototype, {
             return true;
         }
         return this.getCashPaymentMethods().every((paymentMethod) =>
-            this.env.utils.isValidFloat(this.state.openingCashByMethod[paymentMethod.id])
+            this.pos.isValidFloat(this.state.openingCashByMethod[paymentMethod.id])
         );
     },
 });

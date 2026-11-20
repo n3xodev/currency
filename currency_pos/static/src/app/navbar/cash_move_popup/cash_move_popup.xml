@@ -2,18 +2,18 @@
 <templates id="template" xml:space="preserve">
     <t t-inherit="point_of_sale.CashMovePopup" t-inherit-mode="extension">
         <xpath expr="//div[hasclass('input-amount')]" position="before">
-            <div t-if="showCashMethodSelector" class="mb-2">
+            <div t-if="this.showCashMethodSelector" class="mb-2">
                 <label class="form-label">Cash register</label>
-                <select class="form-select" t-custom-model.number="state.paymentMethodId">
-                    <t t-foreach="getCashPaymentMethods()" t-as="cashMethod" t-key="cashMethod.id">
+                <select class="form-select" t-model.number.proxy="this.state.paymentMethodId">
+                    <t t-foreach="this.getCashPaymentMethods()" t-as="cashMethod" t-key="cashMethod.id">
                         <option t-att-value="cashMethod.id" t-out="cashMethod.name"/>
                     </t>
                 </select>
             </div>
         </xpath>
-        <xpath expr="//Input[@tModel=&quot;[state, 'amount']&quot;]" position="attributes">
-            <attribute name="icon">{type: 'string', value: selectedCashCurrency.symbol}</attribute>
-            <attribute name="iconOnLeftSide">false</attribute>
+        <xpath expr="//CashInput[@tModel=&quot;[this.state, 'amount']&quot;]" position="attributes">
+            <attribute name="currencySymbol">this.selectedCashCurrency.symbol</attribute>
+            <attribute name="currencyPosition">this.selectedCashCurrency.position || 'after'</attribute>
         </xpath>
     </t>
 </templates>
