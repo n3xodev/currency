@@ -1,3 +1,5 @@
+import math
+
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_is_zero
@@ -286,8 +288,37 @@ class PosSession(models.Model):
         `payment_method_closing` is Odoo 20's `{payment_method_id: counted}`
         mapping; the counted amount of a cash box is in its own currency.
         """
+        self.ensure_one()
+        if self.state == "closed":
+            # Core reports draft orders before the closed state, which makes
+            # the popup offer a retry loop on a session closed elsewhere.
+            return {
+                "status": False,
+                "type": "session_already_closed",
+                "message": _("This session is already closed."),
+                "redirect": True,
+            }
+        self._oca_check_closing_counts(payment_method_closing)
         session = self.with_context(oca_payment_method_closing=payment_method_closing or {})
         return super(PosSession, session).close_session_from_ui(payment_method_closing)
+
+    def _oca_check_closing_counts(self, payment_method_closing):
+        """Refuse malformed counted amounts instead of failing deep in the closing."""
+        try:
+            valid = isinstance(payment_method_closing, dict)
+            counted_map = (
+                self._oca_normalize_cashbox_values(payment_method_closing) if valid else {}
+            )
+            valid = valid and all(
+                isinstance(amount, (int, float))
+                and not isinstance(amount, bool)
+                and math.isfinite(amount)
+                for amount in counted_map.values()
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid = False
+        if not valid:
+            raise UserError(_("The counted amounts are invalid."))
 
     def _oca_record_cash_box_counts(self):
         """Store the counted balance and the difference of every cash box.
