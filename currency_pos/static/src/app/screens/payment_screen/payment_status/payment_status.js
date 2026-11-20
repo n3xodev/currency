@@ -58,6 +58,6 @@ patch(PaymentScreenStatus.prototype, {
             : convertCurrency(order.change, order.currency, paymentCurrency, this.pos.models);
         const formattedForeign = formatPaymentCurrencyAmount(foreignAmount, paymentCurrency);
         const symbol = paymentCurrency.symbol || paymentCurrency.name || "";
-        return `${formattedForeign} ${symbol} (${this.env.utils.formatCurrency(baseAmount)})`;
+        return `${formattedForeign} ${symbol} (${this.pos.formatCurrency(baseAmount)})`;
     },
 });

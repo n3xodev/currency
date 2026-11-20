@@ -27,43 +27,13 @@ patch(PaymentScreen.prototype, {
     },
 
     onMounted() {
-        const order = this.pos.getOrder();
-        if (!order) {
-            return;
-        }
-        this.normalizeInvalidPaymentLines(order);
-
+        // Core's onMounted drops the lines whose method left the config and
+        // activates the invoice option of refunds: keep it, then add this module's
+        // single-method shortcut.
+        super.onMounted(...arguments);
         if (this.payment_methods_from_config.length === 1 && this.paymentLines.length === 0) {
             this.addNewPaymentLine(this.payment_methods_from_config[0]);
         }
-    },
-
-    normalizeInvalidPaymentLines(order = this.currentOrder) {
-        if (!order) {
-            return;
-        }
-        const allowedMethods = (this.pos.config.payment_method_ids || []).filter((pm) => pm?.id);
-        const allowedMethodIds = new Set(allowedMethods.map((pm) => pm.id));
-        const fallbackMethod = allowedMethods[0] || null;
-
-        for (const payment of [...order.payment_ids]) {
-            const currentMethodId = this.getPaymentMethodId(payment?.payment_method_id);
-            if (currentMethodId && allowedMethodIds.has(currentMethodId)) {
-                continue;
-            }
-            if (fallbackMethod) {
-                payment.update?.({
-                    payment_method_id: fallbackMethod,
-                    amount: 0,
-                    payment_status: "reversed",
-                });
-            }
-        }
-    },
-
-    async validateOrder(isForceValidate) {
-        this.normalizeInvalidPaymentLines(this.currentOrder);
-        return super.validateOrder(...arguments);
     },
 
     get paymentLines() {
