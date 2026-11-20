@@ -11,6 +11,7 @@ class TestPosPaymentCurrencyCommon(TestPoSCommon):
             cls.cash_payment_method = cls.env["pos.payment.method"].create(
                 {
                     "name": "Cash MC",
+                    "type": "cash",
                     "receivable_account_id": cls.company_data["default_account_receivable"].id,
                     "journal_id": cls.company_data["default_journal_cash"].id,
                     "company_id": cls.env.company.id,
@@ -40,6 +41,7 @@ class TestPosPaymentCurrencyCommon(TestPoSCommon):
         cls.eur_bank_payment_method = cls.env["pos.payment.method"].create(
             {
                 "name": "Bank EUR",
+                "type": "bank",
                 "journal_id": cls.eur_bank_journal.id,
                 "receivable_account_id": cls.company_data["default_account_receivable"].id,
             }
@@ -72,6 +74,7 @@ class TestPosPaymentCurrencyCommon(TestPoSCommon):
         cls.eur_cash_payment_method = cls.env["pos.payment.method"].create(
             {
                 "name": "Cash EUR",
+                "type": "cash",
                 "journal_id": cls.eur_cash_journal.id,
                 "receivable_account_id": cls.company_data["default_account_receivable"].id,
             }
@@ -81,7 +84,6 @@ class TestPosPaymentCurrencyCommon(TestPoSCommon):
             {
                 "name": "POS Multi Currency",
                 "journal_id": cls.company_data["default_journal_sale"].id,
-                "invoice_journal_id": cls.company_data["default_journal_sale"].id,
                 "allow_multi_currency_payment": True,
                 "payment_method_ids": [
                     (4, cls.cash_payment_method.id),

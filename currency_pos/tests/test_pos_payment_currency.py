@@ -20,7 +20,6 @@ class TestPosPaymentCurrency(TestPosPaymentCurrencyCommon):
             {
                 "name": "POS Single Currency",
                 "journal_id": self.company_data["default_journal_sale"].id,
-                "invoice_journal_id": self.company_data["default_journal_sale"].id,
                 "allow_multi_currency_payment": False,
             }
         )
@@ -144,7 +143,6 @@ class TestPosPaymentCurrency(TestPosPaymentCurrencyCommon):
                 "amount_tax": 0.0,
                 "amount_paid": 0.0,
                 "amount_return": 0.0,
-                "last_order_preparation_change": "{}",
             }
         )
 
