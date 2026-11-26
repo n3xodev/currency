@@ -12,7 +12,7 @@ patch(ControlButtons.prototype, {
     getExchangeCurrencyList() {
         const currencyList = [];
         const currentExchangeCurrency =
-            this.exchangeCurrency || this.pos._getDefaultPricelistCurrency();
+            this.exchangeCurrency || this.pos._getDefaultExchangeCurrency();
         const companyCurrency = this.pos.company.currency_id;
         if (companyCurrency) {
             currencyList.push({

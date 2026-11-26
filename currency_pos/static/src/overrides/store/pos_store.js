@@ -8,7 +8,7 @@ patch(PosStore.prototype, {
     async setup(...args) {
         await super.setup(...args);
         this.currencyEventBus = new EventBus();
-        this.exchange_currency_id = this._getDefaultPricelistCurrency();
+        this.exchange_currency_id = this._getDefaultExchangeCurrency();
         await this.currencyPosRefreshForeignProductPrices();
     },
 
@@ -27,6 +27,24 @@ patch(PosStore.prototype, {
         return this._getCurrencyRecord(pricelist?.currency_id) || this.company?.currency_id || null;
     },
 
+    _getFirstSecondaryCurrency() {
+        const companyCurrencyId = this.company?.currency_id?.id;
+        return (
+            this.models["res.currency"]?.find(
+                (currency) => currency?.id && currency.id !== companyCurrencyId
+            ) || null
+        );
+    },
+
+    _getDefaultExchangeCurrency() {
+        const companyCurrency = this.company?.currency_id || null;
+        const pricelistCurrency = this._getCurrencyRecord(this.config?.pricelist_id?.currency_id);
+        if (pricelistCurrency && pricelistCurrency.id !== companyCurrency?.id) {
+            return pricelistCurrency;
+        }
+        return this._getFirstSecondaryCurrency() || companyCurrency;
+    },
+
     setExchangeCurrency(currency) {
         const oldCurrency = this.exchange_currency_id;
         this.exchange_currency_id = currency;
@@ -38,13 +56,13 @@ patch(PosStore.prototype, {
     getExchangeCurrency() {
         return (
             this.exchange_currency_id ||
-            this._getDefaultPricelistCurrency() ||
+            this._getDefaultExchangeCurrency() ||
             this.company?.currency_id
         );
     },
 
     getExchangeCurrencyForDisplay() {
-        return this.exchange_currency_id || this._getDefaultPricelistCurrency();
+        return this.exchange_currency_id || this._getDefaultExchangeCurrency();
     },
 
     // Odoo 19 removed getPaymentMethodDisplayText() from core entirely (the
